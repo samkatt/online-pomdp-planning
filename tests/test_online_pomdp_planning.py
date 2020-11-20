@@ -23,6 +23,3 @@ def test_content(response):
     # from bs4 import BeautifulSoup
     # assert 'GitHub' in BeautifulSoup(response.content).title.string
 
-    b = 5
-    b += 10
-    print(b)

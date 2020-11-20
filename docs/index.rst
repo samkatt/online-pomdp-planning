@@ -1,5 +1,5 @@
 Welcome to online-pomdp-planning's documentation!
-======================================
+=================================================
 
 .. toctree::
    :maxdepth: 2
