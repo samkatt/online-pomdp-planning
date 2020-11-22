@@ -65,7 +65,7 @@ coverage: ## check code coverage quickly with the default Python
 docs: ## generate Sphinx HTML documentation, including API docs
 	rm -f docs/online_pomdp_planning.rst
 	rm -f docs/modules.rst
-	sphinx-apidoc -o docs/ online_pomdp_planning
+	sphinx-apidoc -ef -o docs/ online_pomdp_planning
 	$(MAKE) -C docs clean
 	$(MAKE) -C docs html
 	$(BROWSER) docs/_build/html/index.html

@@ -108,7 +108,7 @@ ENV/
 tags
 
 # auto generated docs
-docs/online_pomdp_planning.rst
+docs/online_pomdp_planning*.rst
 docs/modules.rst
 
 # personal
