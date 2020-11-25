@@ -1,21 +1,21 @@
 """Defines some types for ease of reading"""
 
-import abc
+from typing import Protocol
 
 
-class Action(abc.ABC):
+class Action(Protocol):
     """The abstract type representing actions"""
 
 
-class Observation(abc.ABC):
+class Observation(Protocol):
     """The abstract type representing observations"""
 
 
-class State(abc.ABC):
+class State(Protocol):
     """The abstract type representing states"""
 
 
-class Belief(abc.ABC):
+class Belief(Protocol):
     """The abstract type representing beliefs
 
     We expect the belief to sample states
@@ -23,18 +23,16 @@ class Belief(abc.ABC):
     .. automethod:: __call__
     """
 
-    @abc.abstractmethod
     def __call__(self) -> State:
         """Required implementation of belief: the ability to sample states"""
 
 
-class Planner(abc.ABC):
+class Planner(Protocol):
     """The abstract class representation for planners in this package
 
     .. automethod:: __call__
     """
 
-    @abc.abstractmethod
     def __call__(self, belief: Belief) -> Action:
         """
         The main functionality this package offers: a method that takes in a

@@ -1,23 +1,19 @@
 """Implementation of Monte-Carlo tree search"""
-import abc
-from typing import Dict, Optional, Tuple
+from typing import Dict, Generic, Optional, Protocol, Tuple, TypeVar
 
 from online_pomdp_planning.types import Action, Belief, Observation, State
 
+Statistics = TypeVar('Statistics')
+"""The statistics stored in action nodes"""
 
-class Statistics(abc.ABC):
-    """The statistics stored in action nodes"""
+SelectionOutput = TypeVar('SelectionOutput')
+"""The output of the selection method (may have additional statistics)"""
 
-
-class SelectionOutput(abc.ABC):
-    """The output of the selection method (may have additional statistics)"""
-
-
-class EvaluationMetric(abc.ABC):
-    """The output of an leaf evaluation method"""
+EvaluationMetric = TypeVar('EvaluationMetric')
+"""The output of an leaf evaluation method"""
 
 
-class ActionNode:
+class ActionNode(Generic[Statistics]):
     """A decision node in the MCTS tree
 
     This node maps observations to children nodes. In addition it stores
@@ -89,13 +85,12 @@ class ObservationNode:
         return self.action_nodes[action]
 
 
-class LeafSelection(abc.ABC):
+class LeafSelection(Protocol):
     """The signature for leaf selection
 
     .. automethod:: __call__
     """
 
-    @abc.abstractmethod
     def __call__(
         self, s: State, node: ObservationNode
     ) -> Tuple[ActionNode, State, Observation, SelectionOutput]:
@@ -109,13 +104,12 @@ class LeafSelection(abc.ABC):
         """
 
 
-class Expansion(abc.ABC):
+class Expansion(Protocol):
     """The signature for leaf node expansion
 
     .. automethod:: __call__
     """
 
-    @abc.abstractmethod
     def __call__(self, o: Observation, a: ActionNode) -> ObservationNode:
         """Expands a leaf node
 
@@ -128,13 +122,12 @@ class Expansion(abc.ABC):
         """
 
 
-class Evaluation(abc.ABC):
+class Evaluation(Protocol):
     """The signature of leaf node evaluation
 
     .. automethod:: __call__
     """
 
-    @abc.abstractmethod
     def __call__(self, s: State, o: Observation) -> EvaluationMetric:
         """Evaluates a leaf node
 
@@ -147,13 +140,12 @@ class Evaluation(abc.ABC):
         """
 
 
-class BackPropagation(abc.ABC):
+class BackPropagation(Protocol):
     """The signature for back propagation through nodes
 
     .. automethod:: __call__
     """
 
-    @abc.abstractmethod
     def __call__(
         self, n: ObservationNode, out: SelectionOutput, val: EvaluationMetric
     ) -> None:
@@ -170,14 +162,21 @@ class BackPropagation(abc.ABC):
         """
 
 
-class ActionSelection(abc.ABC):
+class ActionSelection(Protocol, Generic[Statistics]):
     """The signature for selection actions given the root node
 
     .. automethod:: __call__
     """
 
-    @abc.abstractmethod
-    def __call__(self, n: ObservationNode) -> Action:
+    def __call__(self, stats: Dict[Action, Statistics]) -> Action:
+        """Selects the preferred action given statistics
+
+
+        :param stats: statistics of the (root) node
+        :type stats: Dict[Action, Statistics]
+        :return: preferred action
+        :rtype: Action
+        """
 
 
 def general_MCTS(
@@ -231,4 +230,4 @@ def general_MCTS(
         evaluation = evaluate(leaf_state, leaf_observation)  # type: ignore
         backprop(expanded_node, selection_output, evaluation)
 
-    return action_select(root_node)
+    return action_select(root_node.child_stats)
