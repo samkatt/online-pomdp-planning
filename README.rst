@@ -2,7 +2,6 @@
 online-pomdp-planning
 =====================
 
-
 .. image:: https://img.shields.io/pypi/v/online_pomdp_planning.svg
         :target: https://pypi.python.org/pypi/online_pomdp_planning
 
@@ -12,9 +11,6 @@ online-pomdp-planning
 .. image:: https://readthedocs.org/projects/online-pomdp-planning/badge/?version=latest
         :target: https://online-pomdp-planning.readthedocs.io/en/latest/?badge=latest
         :alt: Documentation Status
-
-
-
 
 Online planning methods for POMDPs
 
@@ -28,7 +24,7 @@ Partially observable Markov decision processes (POMDP
 [kaelbling_planning_1998]_) is a mathematical framework for defining
 reinforcement learning (RL) in environments with hidden state. To solve the RL
 problem means to come up with a policy, a mapping from the past observations of
-the environment to an action. 
+the environment to an action.
 
 .. online planning
 
@@ -46,6 +42,51 @@ implements a set of these methods:
    methods/despot
    methods/f3s
 
+.. provided in this package
+
+Concretely, this package provides factory functions to construct
+:py:class:`~online_pomdp_planning.types.Planner`. A planner is a function that
+is called with a :py:class:`~online_pomdp_planning.types.Belief`, and returns a
+:py:class:`~online_pomdp_planning.types.Action`.
+
+.. automethod:: online_pomdp_planning.types.Planner.__call__
+   :noindex:
+
+Types
+-----
+
+I am unreasonably terrified of dynamic typed languages and have gone to
+extremes to define as many as possible. Most of these are for internal use, but
+you will come across some as a user of this library. Most of these types will
+have no actual meaning, in particular:
+
+.. autosummary::
+   :nosignatures:
+
+   online_pomdp_planning.types.Action
+   online_pomdp_planning.types.Observation
+   online_pomdp_planning.types.State
+
+.. meaningless types: `Action`, `Observation` & `State`
+
+Are domain specific and unimportant. All that is required is that the
+:py:class:`~online_pomdp_planning.types.Action` and
+:py:class:`~online_pomdp_planning.types.Observation` are `hashable`. The
+:py:class:`~online_pomdp_planning.types.State` is not used by the library code
+whatsoever.
+
+.. `Belief` type
+
+A notable exception is the :py:class:`~online_pomdp_planning.types.Belief`,
+which is assumed to a callable that produces states. This represent that we
+assume the belief is a way of sampling states.
+
+.. automethod:: online_pomdp_planning.types.Belief.__call__
+   :noindex:
+
+.. [kaelbling_planning_1998] Kaelbling, Leslie Pack, Michael L. Littman, and
+   Anthony R. Cassandra. "Planning and acting in partially observable
+   stochastic domains." Artificial intelligence 101.1-2 (1998): 99-134.
 
 Credits
 -------
@@ -54,7 +95,3 @@ This package was created with Cookiecutter_ and the `audreyr/cookiecutter-pypack
 
 .. _Cookiecutter: https://github.com/audreyr/cookiecutter
 .. _`audreyr/cookiecutter-pypackage`: https://github.com/audreyr/cookiecutter-pypackage
-
-.. [kaelbling_planning_1998] Kaelbling, Leslie Pack, Michael L. Littman, and
-   Anthony R. Cassandra. "Planning and acting in partially observable
-   stochastic domains." Artificial intelligence 101.1-2 (1998): 99-134.

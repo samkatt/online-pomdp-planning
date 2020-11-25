@@ -31,64 +31,68 @@ At the end of the simulation budget the statistics in the root of the tree are
 used to pick the action. After executing the action and an observation is
 perceived the belief updated and we repeat.
 
+.. toctree::
+   :maxdepth: 1
+
+   mcts/pouct
+
+
+
 Implementation details
 ======================
 
 This library implements MCTS as a combination of:
 
-#. A `Tree Policy`_
-#. An `Observation generator`_
-#. An `Expansion`_ method
-#. An `Evaluation`_ method
-#. A `Back propagation`_ method
-#. An `Action selector`_ method given the root statistics
+#. `Leaf selection`_
+#. `Leaf expansion`_
+#. `Leaf Evaluation`_
+#. `Back propagation`_
+#. `Action selector`_
 
 The idea is that typical implementations of these components are given, but
 that it is easy to create your own to adapt MCTS to your own liking (e.g.\
 provide your own evaluation method).
 
-Tree policy
------------
-
-.. english description
+Leaf selection
+--------------
 
 The tree policy is a function that takes in the statistics of a node and
 returns an action. This mapping is being used to pick actions while traversing
-a tree. A popular choice is upper confidence bound (UCB)
-[auer_finite-time_2002]_.
+a tree:
 
-.. TODO: signature and list of functions
+.. automethod:: online_pomdp_planning.mcts.LeafSelection.__call__
+   :noindex:
 
-Observation generator
----------------------
+A popular choice is upper confidence bound (UCB) [auer_finite-time_2002]_.
 
-The observation generator generates the observations *while traversing the
-tree*. Typically a simulator is used to do so, but in domains with a large
-(e.g.\  continuous) observation space methods such as progressive widening to
-limit the branching factor on observations [sunberg_online_2018]_
-[couetoux2011continuous]_.
+.. TODO: list of functions
 
-.. TODO: signature and list of functions
-
-Expansion
----------
+Leaf expansion
+--------------
 
 The expansion method decides how to grow the tree upon reaching a leaf. The
 most common approach is to add a node that represents the simulated
-(action-observation) 'history' with some initial statistics.
+(action-observation) 'history' with some initial statistics:
 
-.. TODO: signature and list of functions
+.. automethod:: online_pomdp_planning.mcts.Expansion.__call__
+   :noindex:
 
-Evaluation
-----------
+.. TODO: list of functions
+
+Leaf evaluation
+---------------
 
 The evaluation of a leaf node gives an estimated return (value) of a node,
-called when a leaf is reached. A common implementation is a (random)
-interaction with the environment. More effective implementations can be
-domain-specific policies or evaluation models (e.g.\  neural networks trained
-to evaluate a history).
+called when a leaf is reached:
 
-.. TODO: signature and list of functions
+.. automethod:: online_pomdp_planning.mcts.Evaluation.__call__
+   :noindex:
+
+A common implementation is a (random) interaction with the environment. More
+effective implementations can be domain-specific policies or evaluation models
+(e.g.\  neural networks trained to evaluate a history).
+
+.. TODO: list of functions
 
 Back propagation
 ----------------
@@ -96,19 +100,28 @@ Back propagation
 The back propagation method implements how a visited node should be updated and
 takes in the node and the return of the simulation (after picking this node).
 It is expected that the implementation updates the node statistics one way or
-another. The most common implementation tracks the number of node visits
-and the average return.
+another.
 
-.. TODO: signature and list of functions
+.. automethod:: online_pomdp_planning.mcts.BackPropagation.__call__
+   :noindex:
+
+.. TODO: list of functions
+
+The most common implementation tracks the number of node visits and the average
+return.
 
 Action selector
 ---------------
 
 Lastly, the action selector decides how to pick the action given the statistics
-in the root node. A common method is to pick the action with highest associated
-average return.
+in the root node.
 
-.. TODO: signature and list of functions
+.. automethod:: online_pomdp_planning.mcts.ActionSelection.__call__
+   :noindex:
+
+.. TODO: list of functions
+
+A common method is to pick the action with highest associated average return.
 
 .. References
 
@@ -122,11 +135,3 @@ average return.
 .. [auer_finite-time_2002] Auer, Peter, Nicolo Cesa-Bianchi, and Paul Fischer.
    "Finite-time analysis of the multiarmed bandit problem." Machine learning
    47.2-3 (2002): 235-256.
-
-.. [sunberg_online_2018] Sunberg, Zachary, and Mykel Kochenderfer. "Online
-   algorithms for POMDPs with continuous state, action, and observation
-   spaces." arXiv preprint arXiv:1709.06196 (2017).
-
-.. [couetoux2011continuous] Couëtoux, Adrien, et al. "Continuous upper
-   confidence trees." International Conference on Learning and Intelligent
-   Optimization. Springer, Berlin, Heidelberg, 2011.
