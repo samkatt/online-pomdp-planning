@@ -68,6 +68,9 @@ docs: ## generate Sphinx HTML documentation, including API docs
 	sphinx-apidoc -ef -o docs/ online_pomdp_planning
 	$(MAKE) -C docs clean
 	$(MAKE) -C docs html
+
+docs-open: docs ## generate docs and open in browser
+	echo $(BROWSER)
 	$(BROWSER) docs/_build/html/index.html
 
 servedocs: docs ## compile the docs watching for changes
