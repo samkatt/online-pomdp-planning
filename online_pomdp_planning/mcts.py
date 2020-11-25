@@ -30,14 +30,34 @@ class ActionNode(Generic[Statistics]):
         :param initial_statistics: anything you would like to store
         :type initial_statistics: Statistics
         :param parent: the parent node in the tree
-        :type parent: 'ObservationNode'
+        :type parent: ObservationNode
         """
         self.parent = parent
         self.observation_nodes: Dict[Observation, 'ObservationNode'] = {}
         self.stats = initial_statistics
 
+    def add_observation_node(
+        self, observation: Observation, observation_node: 'ObservationNode'
+    ):
+        """Adds a node to the children of `self`
+
+        Raises `AssertionError` if:
+            - the parent of the added node is not self
+            - `observation` is not already associated with a child node
+
+        :param observation: the observation associated with child
+        :type observation: Observation
+        :param observation_node: the new child node
+        :type observation_node: ObservationNode
+        """
+        assert observation not in self.observation_nodes
+        assert observation_node.parent == self
+        self.observation_nodes[observation] = observation_node
+
     def observation_node(self, observation: Observation) -> 'ObservationNode':
         """The child-node associated with given observation `o`
+
+        Raises `KeyError` if `action` is not associated with a child node
 
         :param observation:
         :type observation: Observation
@@ -55,7 +75,7 @@ class ObservationNode:
     is the root node. This node maps actions to children nodes.
     """
 
-    def __init__(self, parent: Optional[ActionNode]):
+    def __init__(self, parent: Optional[ActionNode] = None):
         """Initiates an observation node with given parent
 
         :param parent: if no parent is given, this must be the root node
@@ -73,15 +93,33 @@ class ObservationNode:
         """
         return {a: n.stats for a, n in self.action_nodes.items()}
 
+    def add_action_node(self, action: Action, node: ActionNode):
+        """Adds a `action` -> `node` mapping to children
+
+        Raises `AssertionError` if:
+            - the parent of the added node is not self
+            - `action` is not already associated with a child node
+
+
+        :param action: action associated with new child
+        :type action: Action
+        :param node: child node
+        :type node: ActionNode
+        """
+        assert action not in self.action_nodes
+        assert node.parent == self
+        self.action_nodes[action] = node
+
     def action_node(self, action: Action) -> ActionNode:
         """Get child node associated with `action`
+
+        Raises `KeyError` if `action` is not associated with a child node
 
         :param action:
         :type action: Action
         :return: returns child node
         :rtype: ActionNode
         """
-        # TODO: ensure one is created if it does not exist yet
         return self.action_nodes[action]
 
 

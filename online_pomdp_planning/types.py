@@ -4,11 +4,25 @@ from typing import Protocol
 
 
 class Action(Protocol):
-    """The abstract type representing actions"""
+    """The abstract type representing actions
+
+    Requires to be hash-able
+
+    """
+
+    def __hash__(self):
+        """Can be hashed"""
 
 
 class Observation(Protocol):
-    """The abstract type representing observations"""
+    """The abstract type representing observations
+
+    Requires to be hash-able
+
+    """
+
+    def __hash__(self):
+        """Can be hashed"""
 
 
 class State(Protocol):
