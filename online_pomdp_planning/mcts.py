@@ -3,13 +3,13 @@ from typing import Dict, Generic, Optional, Protocol, Tuple, TypeVar
 
 from online_pomdp_planning.types import Action, Belief, Observation, State
 
-Statistics = TypeVar('Statistics')
+Statistics = TypeVar("Statistics")
 """The statistics stored in action nodes"""
 
-SelectionOutput = TypeVar('SelectionOutput')
+SelectionOutput = TypeVar("SelectionOutput")
 """The output of the selection method (may have additional statistics)"""
 
-EvaluationMetric = TypeVar('EvaluationMetric')
+EvaluationMetric = TypeVar("EvaluationMetric")
 """The output of an leaf evaluation method"""
 
 
@@ -23,7 +23,7 @@ class ActionNode(Generic[Statistics]):
     def __init__(
         self,
         initial_statistics: Statistics,
-        parent: 'ObservationNode',
+        parent: "ObservationNode",
     ):
         """Initializes the action node with given statistics
 
@@ -33,11 +33,11 @@ class ActionNode(Generic[Statistics]):
         :type parent: ObservationNode
         """
         self.parent = parent
-        self.observation_nodes: Dict[Observation, 'ObservationNode'] = {}
+        self.observation_nodes: Dict[Observation, "ObservationNode"] = {}
         self.stats = initial_statistics
 
     def add_observation_node(
-        self, observation: Observation, observation_node: 'ObservationNode'
+        self, observation: Observation, observation_node: "ObservationNode"
     ):
         """Adds a node to the children of `self`
 
@@ -54,7 +54,7 @@ class ActionNode(Generic[Statistics]):
         assert observation_node.parent == self
         self.observation_nodes[observation] = observation_node
 
-    def observation_node(self, observation: Observation) -> 'ObservationNode':
+    def observation_node(self, observation: Observation) -> "ObservationNode":
         """The child-node associated with given observation `o`
 
         Raises `KeyError` if `action` is not associated with a child node
@@ -75,7 +75,7 @@ class ObservationNode:
     is the root node. This node maps actions to children nodes.
     """
 
-    def __init__(self, parent: Optional[ActionNode] = None):
+    def __init__(self, parent: Optional[ActionNode] = None):  # pylint: disable=E1136
         """Initiates an observation node with given parent
 
         :param parent: if no parent is given, this must be the root node

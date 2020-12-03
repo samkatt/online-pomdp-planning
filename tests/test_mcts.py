@@ -45,14 +45,14 @@ def test_action_node_child(observation):
 
 
 @pytest.mark.parametrize(
-    "parent", [(None), (ActionNode('garbage statistic', ObservationNode()))]
+    "parent", [(None), (ActionNode("garbage statistic", ObservationNode()))]
 )
 def test_observation_node__constructor(parent):
     """Tests initiation of observation nodes"""
     n = ObservationNode(parent)
     assert parent == n.parent
 
-    other_node = ActionNode('garbage statistic', ObservationNode())
+    other_node = ActionNode("garbage statistic", ObservationNode())
 
     assert other_node != n.parent
 
@@ -66,7 +66,7 @@ def test_observation_node_child(action):
     with pytest.raises(KeyError):
         n.action_node(action)
 
-    child = ActionNode('some statistic', parent=n)
+    child = ActionNode("some statistic", parent=n)
     n.add_action_node(action, child)
 
     # cannot modify existing child
@@ -86,7 +86,7 @@ def test_observation_child_stats():
     node.add_action_node(action_1, child_1)
 
     action_2 = True
-    child_2 = ActionNode((True, False, ('garbage')), node)
+    child_2 = ActionNode((True, False, ("garbage")), node)
     node.add_action_node(action_2, child_2)
 
     assert node.child_stats == {
