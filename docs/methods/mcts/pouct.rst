@@ -5,6 +5,8 @@ Partially observable upper confidence bound
 Monte-Carlo tree search, first implemented in POMCP [silver_monte-carlo_2010]_
 implementation where the components are:
 
+- root node construct: :py:func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`
+    - simply initiates a action node for each action
 - leaf selection :py:func:`~online_pomdp_planning.mcts.ucb_select_leaf`
     - action generation: upper-confidence bound for action selection
     - observation generation: simulator for observation generator

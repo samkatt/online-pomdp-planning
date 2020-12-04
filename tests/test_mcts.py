@@ -10,6 +10,7 @@ from online_pomdp_planning.mcts import (
     ActionNode,
     ObservationNode,
     backprop_running_q,
+    create_root_node_with_child_for_all_actions,
     expand_node_with_all_actions,
     pick_max_q,
     random_policy,
@@ -109,6 +110,23 @@ def test_observation_child_stats():
 
 
 @pytest.mark.parametrize(
+    "actions,init_stats",
+    [
+        ([False, 1, (10, 2)], "some garbage"),
+        ([], {"qval": 10, "n": 0}),
+    ],
+)
+def test_create_root_node_with_child_for_all_actions(actions, init_stats):
+    """Tests :py:func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`"""
+    node = create_root_node_with_child_for_all_actions(actions, init_stats)
+
+    for a in actions:
+        assert node.action_node(a).stats == init_stats
+        assert node.action_node(a).parent == node
+        assert node.action_node(a).observation_nodes == {}
+
+
+@pytest.mark.parametrize(
     "stats,max_a",
     [
         ({0: {"qval": 0.1}}, 0),
@@ -136,12 +154,14 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     stats = 0
     node = ActionNode(stats, parent)
 
-    expansion = expand_node_with_all_actions(
+    expand_node_with_all_actions(
         actions,
         init_stats,
         o,
         node,
     )
+
+    expansion = node.observation_node(o)
 
     assert expansion.parent is node
     assert node.observation_node(o) is expansion
@@ -321,17 +341,18 @@ def test_ucb_select_leaf():
 
 def test_backprop_running_q_assertion():
     """Tests that :py:func:`~online_pomdp_planning.mcts.backprop_running_q` raises bad discount"""
+    some_obs_node = ObservationNode()
     with pytest.raises(AssertionError):
         backprop_running_q(
             -1,
-            ObservationNode(),
+            ActionNode("gargabe", some_obs_node),
             [],
             0,
         )
     with pytest.raises(AssertionError):
         backprop_running_q(
             1.1,
-            ObservationNode(),
+            ActionNode("gargabe", some_obs_node),
             [],
             0,
         )
@@ -352,17 +373,13 @@ def test_backprop_running_q(discount_factor, new_q_first, new_q_leaf):
     root = construct_ucb_tree(observation_from_simulator)
 
     # fake leaf node
-    leaf_action_node = root.action_node(False).observation_node(2).action_node((10, 2))
-
-    # fake expand to get an observation node
-    expansion = ObservationNode(leaf_action_node)
-    leaf_action_node.add_observation_node("some action", expansion)
+    leaf_node = root.action_node(False).observation_node(2).action_node((10, 2))
 
     leaf_selection_output = [0.1, 7.0]
     leaf_evaluation = -5
     backprop_running_q(
         discount_factor,
-        expansion,
+        leaf_node,
         leaf_selection_output,
         leaf_evaluation,
     )
@@ -372,8 +389,8 @@ def test_backprop_running_q(discount_factor, new_q_first, new_q_leaf):
     # so we can compute what the updated q-values and 'n' are
     # q-values are running average, 'n' is just incremented
 
-    assert leaf_action_node.stats["n"] == 1
-    assert leaf_action_node.stats["qval"] == pytest.approx(new_q_leaf)
+    assert leaf_node.stats["n"] == 1
+    assert leaf_node.stats["qval"] == pytest.approx(new_q_leaf)
 
     first_chosen_action_node = root.action_node(False)
 

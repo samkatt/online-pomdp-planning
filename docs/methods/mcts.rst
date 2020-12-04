@@ -13,8 +13,8 @@ when it reaches a leaf. In POMDPs the tree branches on actions and observations
 Short description
 =================
 
-A simulation starts by sampling a state from the belief, and consists of 4
-steps:
+First a root node is created, then the algorithm proceeds with simulations.  A
+simulation starts by sampling a state from the belief, and consists of 4 steps:
 
 #. Select a leaf node by traversing through the tree
 #. Expand the chosen leaf node
@@ -41,6 +41,7 @@ Implementation details
 
 This library implements MCTS as a combination of:
 
+#. `Tree construction`
 #. `Leaf selection`_
 #. `Leaf expansion`_
 #. `Leaf Evaluation`_
@@ -50,6 +51,21 @@ This library implements MCTS as a combination of:
 The idea is that typical implementations of these components are given, but
 that it is easy to create your own to adapt MCTS to your own liking (e.g.\
 provide your own evaluation method).
+
+Tree construction
+-----------------
+
+This function simply returns the root node of an initial 'tree'. A fair share
+of domain knowledge can be used here, but a typical initiation simply creates
+the first set of action nodes, one for each action.
+
+.. autofunction:: online_pomdp_planning.mcts.TreeConstructor.__call__
+   :noindex:
+
+
+Provided implementations:
+
+    - :py:func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`
 
 Leaf selection
 --------------
