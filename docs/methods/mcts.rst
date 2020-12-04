@@ -36,8 +36,6 @@ perceived the belief updated and we repeat.
 
    mcts/pouct
 
-
-
 Implementation details
 ======================
 
@@ -65,8 +63,6 @@ a tree:
 
 A popular choice is upper confidence bound (UCB) [auer_finite-time_2002]_.
 
-.. TODO: list of functions
-
 Leaf expansion
 --------------
 
@@ -77,7 +73,10 @@ most common approach is to add a node that represents the simulated
 .. automethod:: online_pomdp_planning.mcts.Expansion.__call__
    :noindex:
 
-.. TODO: list of functions
+Provided implementations:
+
+- :py:func:`~online_pomdp_planning.mcts.expand_node_with_all_actions` expand a
+  new node with references for all provided actions
 
 Leaf evaluation
 ---------------
@@ -92,8 +91,6 @@ A common implementation is a (random) interaction with the environment. More
 effective implementations can be domain-specific policies or evaluation models
 (e.g.\  neural networks trained to evaluate a history).
 
-.. TODO: list of functions
-
 Back propagation
 ----------------
 
@@ -104,8 +101,6 @@ another.
 
 .. automethod:: online_pomdp_planning.mcts.BackPropagation.__call__
    :noindex:
-
-.. TODO: list of functions
 
 The most common implementation tracks the number of node visits and the average
 return.
@@ -119,7 +114,9 @@ in the root node.
 .. automethod:: online_pomdp_planning.mcts.ActionSelection.__call__
    :noindex:
 
-.. TODO: list of functions
+Provided implementations:
+
+- :py:func:`~online_pomdp_planning.mcts.pick_max_q` picks the action with max q value
 
 A common method is to pick the action with highest associated average return.
 
