@@ -237,15 +237,15 @@ class Expansion(Protocol):
     .. automethod:: __call__
     """
 
-    def __call__(self, o: Observation, a: ActionNode) -> ObservationNode:
+    def __call__(self, o: Observation, a: ActionNode):
         """Expands a leaf node
 
         :param o: observation that resulted in leaf
         :type o: Observation
         :param a: action that resulted in leaf
         :type a: ActionNode
-        :return: expanded node
-        :rtype: ObservationNode
+        :return: nothing, modifies the tree
+        :rtype: None
         """
 
 
@@ -254,10 +254,11 @@ def expand_node_with_all_actions(
     init_stats: Any,
     o: Observation,
     action_node: ActionNode,
-) -> ObservationNode:
-    """
-    Expands action new :py:class:`ObservationNode` with action child for each
-    :py:class:`~online_pomdp_planning.types.Action`
+):
+    """Adds an observation node to the tree with a child for each action
+
+    Expands `action_node` with new :py:class:`ObservationNode` with action
+    child for each :py:class:`~online_pomdp_planning.types.Action`
 
     When provided with the available actions and initial stats, this implements
     :py:class:`Expansion`
@@ -269,18 +270,16 @@ def expand_node_with_all_actions(
     :param o: the new observation
     :type o: Observation
     :param action_node: the current leaf node
-    :type action:_node: ActionNode
-    :return: action new subtree as child of `action`
-    :rtype: ObservationNode
+    :type action_node: ActionNode
+    :return: modifies tree
+    :rtype: None
     """
-    expansion: ObservationNode = ObservationNode(parent=action_node)
+    expansion = ObservationNode(parent=action_node)
 
     for a in actions:
         expansion.add_action_node(a, ActionNode(deepcopy(init_stats), expansion))
 
     action_node.add_observation_node(o, expansion)
-
-    return expansion
 
 
 class Evaluation(Protocol):
@@ -309,9 +308,9 @@ class Policy(Protocol):
     def __call__(self, s: State, o: Observation) -> Action:
         """A (stochastic) mapping from state and/or observation to action
 
-        :param s: [TODO:description]
+        :param s: the current state
         :type s: State
-        :param o: [TODO:description]
+        :param o: the current observation
         :type o: Observation
         :return: an action
         :rtype: Action
@@ -397,12 +396,12 @@ class BackPropagation(Protocol):
     """
 
     def __call__(
-        self, n: ObservationNode, leaf_selection_output: Any, leaf_eval_output: Any
+        self, n: ActionNode, leaf_selection_output: Any, leaf_eval_output: Any
     ) -> None:
         """Updates the nodes visited during selection
 
         :param n: The leaf node that was expanded
-        :type n: ObservationNode
+        :type n: ActionNode
         :param leaf_selection_output: The output of the selection method
         :type leaf_selection_output: Any
         :param leaf_eval_output: The output of the evaluation method
@@ -414,15 +413,15 @@ class BackPropagation(Protocol):
 
 def backprop_running_q(
     discount_factor: float,
-    n: ObservationNode,
+    leaf: ActionNode,
     leaf_selection_output: List[float],
     leaf_evaluation: float,
 ) -> None:
     """Updates running Q average of visited nodes
 
-    Updates the visited nodes (through parents of `n`) by updating the running
+    Updates the visited nodes (through parents of `leaf`) by updating the running
     Q average. Assumes the statistics in nodes have mappings "qval" -> float
-    and "n" -> int.
+    and "leaf" -> int.
 
     Given a `discount_factor`, implements :py:class:`BackPropagation` with a
     list of rewards as input from :py:class:`LeafSelection` and a return
@@ -430,8 +429,8 @@ def backprop_running_q(
 
     :param discount_factor: 'gamma' of the POMDP environment [0, 1]
     :type discount_factor: float
-    :param n: leaf node
-    :type n: ObservationNode
+    :param leaf: leaf node
+    :type leaf: ActionNode
     :param leaf_selection_output: list of rewards from tree policy
     :type leaf_selection_output: List[float]
     :param leaf_evaluation: return estimate
@@ -444,14 +443,15 @@ def backprop_running_q(
     reverse_return = leaf_evaluation
 
     # loop through all rewards in reverse order
-    # simultaneously traverse back up the tree through `n`
+    # simultaneously traverse back up the tree through `leaf`
+    n: Optional[ActionNode] = leaf  # pylint: disable=E1136
     for reward in reversed(leaf_selection_output):
-        assert n.parent, "somehow got to root without processing all rewards"
+        assert n, "somehow got to root without processing all rewards"
 
         reverse_return = reward + discount_factor * reverse_return
 
         # grab current stats
-        stats = n.parent.stats
+        stats = n.stats
         q, num = stats["qval"], stats["n"]
 
         # store next stats
@@ -461,8 +461,8 @@ def backprop_running_q(
         # go up in tree
         n = n.parent.parent
 
-    # make sure we reached the root
-    assert not n.parent
+    # make sure we reached the 'root action node'
+    assert n is None
 
 
 class ActionSelection(Protocol):
@@ -495,7 +495,43 @@ def pick_max_q(stats: Dict[Action, Any]):
     return max(stats, key=lambda k: stats[k]["qval"])  # type: ignore
 
 
+class TreeConstructor(Protocol):
+    """The signature for creating the root node
+
+    .. automethod:: __call__
+    """
+
+    def __call__(self) -> ObservationNode:
+        """Creates a root node out of nothing
+
+        :return: The root node
+        :rtype: ObservationNode
+        """
+
+
+def create_root_node_with_child_for_all_actions(
+    actions: Iterator[Action],
+    init_stats: Any,
+) -> ObservationNode:
+    """Creates a tree by initiating the first action nodes
+
+    :param actions: the actions to initiate nodes for
+    :type actions: Iterator[Action]
+    :param init_stats: the initial statistics of those nodes
+    :type init_stats: Any
+    :return: the root of the tree
+    :rtype: ObservationNode
+    """
+    root = ObservationNode()
+
+    for a in actions:
+        root.add_action_node(a, ActionNode(deepcopy(init_stats), root))
+
+    return root
+
+
 def mcts(
+    tree_constructor: TreeConstructor,
     leaf_select: LeafSelection,
     expand: Expansion,
     evaluate: Evaluation,
@@ -516,6 +552,10 @@ def mcts(
     After spending the simulation budget, it picks an given the statistics
     stored in the root node through `action_select`.
 
+    The root node constructor allows for custom ways of initiating the tree
+
+    :param tree_constructor: constructor the tree
+    :type tree_constructor: TreeConstructor
     :param leaf_select: the method for selecting leaf nodes
     :type leaf_select: LeafSelection
     :param expand: the leaf expansion method
@@ -535,7 +575,7 @@ def mcts(
     """
     assert n_sims >= 0, "MCTS requires a positive number of simulations"
 
-    root_node: ObservationNode = ObservationNode(parent=None)
+    root_node = tree_constructor()
 
     for _ in range(0, n_sims):
         state = belief()
@@ -545,12 +585,11 @@ def mcts(
             state, root_node
         )
 
-        expanded_node = (
-            expand(obs, leaf) if not terminal_flag else leaf.observation_node(obs)
-        )
+        if not terminal_flag:
+            expand(obs, leaf)
 
         evaluation = evaluate(state, obs, terminal_flag)
-        backprop(expanded_node, selection_output, evaluation)
+        backprop(leaf, selection_output, evaluation)
 
     return action_select(root_node.child_stats)
 
@@ -591,10 +630,21 @@ def create_POUCT(
     if not init_stats:
         init_stats = {"qval": 0, "n": 0}
 
-    leaf_select = partial(ucb, sim, ucb_constant)
+    tree_constructor = partial(
+        create_root_node_with_child_for_all_actions, actions, init_stats
+    )
+    leaf_select = partial(ucb_select_leaf, sim, ucb_constant)
     expansion = partial(expand_node_with_all_actions, actions, init_stats)
     evaluation = partial(rollout, policy, sim, rollout_depth, discount_factor)
     backprop = partial(backprop_running_q, discount_factor)
     action_select = pick_max_q
 
-    return partial(mcts, leaf_select, expansion, evaluation, backprop, action_select)
+    return partial(
+        mcts,
+        tree_constructor,
+        leaf_select,
+        expansion,
+        evaluation,
+        backprop,
+        action_select,
+    )
