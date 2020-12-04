@@ -63,6 +63,10 @@ a tree:
 
 A popular choice is upper confidence bound (UCB) [auer_finite-time_2002]_.
 
+Provided implementations:
+
+    - :py:func:`~online_pomdp_planning.mcts.ucb_select_leaf`
+
 Leaf expansion
 --------------
 
@@ -75,8 +79,8 @@ most common approach is to add a node that represents the simulated
 
 Provided implementations:
 
-- :py:func:`~online_pomdp_planning.mcts.expand_node_with_all_actions` expand a
-  new node with references for all provided actions
+    - :py:func:`~online_pomdp_planning.mcts.expand_node_with_all_actions`
+      expand a new node with references for all provided actions
 
 Leaf evaluation
 ---------------
@@ -90,6 +94,10 @@ called when a leaf is reached:
 A common implementation is a (random) interaction with the environment. More
 effective implementations can be domain-specific policies or evaluation models
 (e.g.\  neural networks trained to evaluate a history).
+
+Provided implementations:
+
+    - :py:func:`~online_pomdp_planning.mcts.rollout`
 
 Back propagation
 ----------------
@@ -105,6 +113,10 @@ another.
 The most common implementation tracks the number of node visits and the average
 return.
 
+Provided implementations:
+
+    - :py:func:`~online_pomdp_planning.mcts.backprop_running_q`
+
 Action selector
 ---------------
 
@@ -116,7 +128,7 @@ in the root node.
 
 Provided implementations:
 
-- :py:func:`~online_pomdp_planning.mcts.pick_max_q` picks the action with max q value
+    - :py:func:`~online_pomdp_planning.mcts.pick_max_q` picks the action with max q value
 
 A common method is to pick the action with highest associated average return.
 

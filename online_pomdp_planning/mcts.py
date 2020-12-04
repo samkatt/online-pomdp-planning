@@ -1,6 +1,7 @@
 """Implementation of Monte-Carlo tree search"""
 from __future__ import annotations
 
+import random
 from copy import deepcopy
 from math import log, sqrt
 from typing import Any, Dict, Iterator, List, Optional, Protocol, Tuple
@@ -160,8 +161,7 @@ def ucb(q: float, n: int, n_total: int, ucb_constant: float) -> float:
 
 
 def select_with_ucb(stats: Dict[Action, Any], ucb_constant: float) -> Action:
-    """
-    Select an action using UCB with given exploration constant
+    """Select an action using UCB with given exploration constant
 
     Assumes `stats` contains entries for "n" and "qval"
 
@@ -182,11 +182,15 @@ def select_with_ucb(stats: Dict[Action, Any], ucb_constant: float) -> Action:
 
 
 def ucb_select_leaf(
-    state: State, node: ObservationNode, sim: Simulator, ucb_constant: float
+    sim: Simulator,
+    ucb_constant: float,
+    state: State,
+    node: ObservationNode,
 ) -> Tuple[ActionNode, State, Observation, bool, List[float]]:
     """Tree policy according to UCB: ucb to pick actions, simulator to generate observations
 
-    Implements :py:class:`LeafSelection`, and returns a list of rewards as output
+    When provided with `sim` and `ucb_constant`, it implements
+    :py:class:`LeafSelection`, and returns a list of rewards as output
 
     Picks action nodes according to :py:class:`select_with_ucb`, uses `sim` to
     generate observations and pick the respective nodes
@@ -194,14 +198,14 @@ def ucb_select_leaf(
     Note: has the potential to be more general and accept any selection method
     (either action node or observation node) as input
 
-    :param state: the root state
-    :type state: State
-    :param node: the root node
-    :type node: ObservationNode
     :param sim: a POMDP simulator
     :type sim: Simulator
     :param ucb_constant: exploration constant of UCB
     :type ucb_constant: float
+    :param state: the root state
+    :type state: State
+    :param node: the root node
+    :type node: ObservationNode
     :return: leaf node, state, observation, terminal flag and list of rewards
     :rtype: Tuple[ActionNode, State, Observation, List[float]]
     """
@@ -220,7 +224,7 @@ def ucb_select_leaf(
         try:
             node = node.action_node(action).observation_node(obs)
         except KeyError:
-            # reached a leaf
+            # action node is a leaf
             break
 
     return node.action_node(action), state, obs, terminal_flag, list_of_rewards
@@ -245,26 +249,26 @@ class Expansion(Protocol):
 
 
 def expand_node_with_all_actions(
-    o: Observation,
-    action_node: ActionNode,
     actions: Iterator[Action],
     init_stats: Any,
+    o: Observation,
+    action_node: ActionNode,
 ) -> ObservationNode:
     """
     Expands action new :py:class:`ObservationNode` with action child for each
     :py:class:`~online_pomdp_planning.types.Action`
 
-    When provided with the available actions, this implements
+    When provided with the available actions and initial stats, this implements
     :py:class:`Expansion`
 
-    :param o: the new observation
-    :type o: Observation
-    :param action_node: the current leaf node
-    :type action:_node: ActionNode
     :param actions: the available actions
     :type actions: Action
     :param init_stats: the initial statistics for each node
     :type init_stats: Any
+    :param o: the new observation
+    :type o: Observation
+    :param action_node: the current leaf node
+    :type action:_node: ActionNode
     :return: action new subtree as child of `action`
     :rtype: ObservationNode
     """
@@ -298,24 +302,166 @@ class Evaluation(Protocol):
         """
 
 
+class Policy(Protocol):
+    """The signature for a policy"""
+
+    def __call__(self, s: State, o: Observation) -> Action:
+        """A (stochastic) mapping from state and/or observation to action
+
+        :param s: [TODO:description]
+        :type s: State
+        :param o: [TODO:description]
+        :type o: Observation
+        :return: an action
+        :rtype: Action
+        """
+
+
+def random_policy(actions: List[Action], _: State, __: Observation) -> Action:
+    """A random policy just picks a random action
+
+    Implements :py:class:`Policy` given `actions`
+
+    :param actions: list of actions to pick randomly from
+    :type actions: List[Action]
+    :param _: ignored (state)
+    :type _: State
+    :param __: ignored (observation)
+    :type __: Observation
+    :return: a random action
+    :rtype: Action
+    """
+    return random.choice(actions)
+
+
+def rollout(
+    policy: Policy,
+    sim: Simulator,
+    depth: int,
+    discount_factor: float,
+    s: State,
+    o: Observation,
+    t: bool,
+) -> float:
+    """Performs a rollout in `sim` according to `policy`
+
+    If `policy`, `sim`, `depth`, and `discount_factor` are given, this
+    implements :py:class:`Evaluation` where it returns a float as metric
+
+    When the terminal flag `t` is set, this function will return 0.
+
+    :param policy:
+    :type policy: Policy
+    :param sim: a POMDP simulator
+    :type sim: Simulator
+    :param depth: the longest number of actions to take
+    :type depth: int
+    :param discount_factor: discount factor of the problem
+    :type discount_factor: float
+    :param s: starting state
+    :type s: State
+    :param o: starting observation
+    :type o: Observation
+    :param t: whether the episode has terminated
+    :type t: bool
+    :return: the discounted return of following `policy` in `sim`
+    :rtype: float
+    """
+    assert 0 <= discount_factor <= 1
+    assert depth >= 0, "prevent never ending loop"
+
+    ret = 0.0
+
+    if t or depth == 0:
+        return ret
+
+    discount = 1.0
+    for _ in range(depth):
+        a = policy(s, o)
+        s, o, r, t = sim(s, a)
+
+        ret += r * discount
+        discount *= discount_factor
+
+        if t:
+            break
+
+    return ret
+
+
 class BackPropagation(Protocol):
     """The signature for back propagation through nodes
 
     .. automethod:: __call__
     """
 
-    def __call__(self, n: ObservationNode, out: Any, val: Any) -> None:
+    def __call__(
+        self, n: ObservationNode, leaf_selection_output: Any, leaf_eval_output: Any
+    ) -> None:
         """Updates the nodes visited during selection
 
         :param n: The leaf node that was expanded
         :type n: ObservationNode
-        :param out: The output of the selection method
-        :type out: Any
-        :param val: The output of the evaluation method
-        :type val: Any
+        :param leaf_selection_output: The output of the selection method
+        :type leaf_selection_output: Any
+        :param leaf_eval_output: The output of the evaluation method
+        :type leaf_eval_output: Any
         :return: has only side effects
         :rtype: None
         """
+
+
+def backprop_running_q(
+    discount_factor: float,
+    n: ObservationNode,
+    leaf_selection_output: List[float],
+    leaf_evaluation: float,
+) -> None:
+    """Updates running Q average of visited nodes
+
+    Updates the visited nodes (through parents of `n`) by updating the running
+    Q average. Assumes the statistics in nodes have mappings "qval" -> float
+    and "n" -> int.
+
+    Given a `discount_factor`, implements :py:class:`BackPropagation` with a
+    list of rewards as input from :py:class:`LeafSelection` and a return
+    estimate (float) from :py:class:`Evaluation`.
+
+    :param discount_factor: 'gamma' of the POMDP environment [0, 1]
+    :type discount_factor: float
+    :param n: leaf node
+    :type n: ObservationNode
+    :param leaf_selection_output: list of rewards from tree policy
+    :type leaf_selection_output: List[float]
+    :param leaf_evaluation: return estimate
+    :type leaf_evaluation: float
+    :return: has only side effects
+    :rtype: None
+    """
+    assert 0 <= discount_factor <= 1
+
+    reverse_return = leaf_evaluation
+
+    # loop through all rewards in reverse order
+    # simultaneously traverse back up the tree through `n`
+    for reward in reversed(leaf_selection_output):
+        assert n.parent, "somehow got to root without processing all rewards"
+
+        reverse_return = reward + discount_factor * reverse_return
+
+        # grab current stats
+        stats = n.parent.stats
+        q, num = stats["qval"], stats["n"]
+
+        # store next stats
+        stats["qval"] = (q * num + reverse_return) / (num + 1)
+        stats["n"] = num + 1
+
+        # go up in tree
+        n = n.parent.parent
+
+    # make sure we reached the root
+    assert not n.parent
 
 
 class ActionSelection(Protocol):

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """tests for `online_pomdp_planning.mcts` module."""
 
+from functools import partial
 from math import log, sqrt
 
 import pytest  # type: ignore
@@ -8,8 +9,11 @@ import pytest  # type: ignore
 from online_pomdp_planning.mcts import (
     ActionNode,
     ObservationNode,
+    backprop_running_q,
     expand_node_with_all_actions,
     pick_max_q,
+    random_policy,
+    rollout,
     select_with_ucb,
     ucb,
     ucb_select_leaf,
@@ -132,7 +136,12 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     stats = 0
     node = ActionNode(stats, parent)
 
-    expansion = expand_node_with_all_actions(o, node, actions, init_stats)
+    expansion = expand_node_with_all_actions(
+        actions,
+        init_stats,
+        o,
+        node,
+    )
 
     assert expansion.parent is node
     assert node.observation_node(o) is expansion
@@ -209,7 +218,7 @@ def construct_ucb_tree(observation_from_simulator) -> ObservationNode:
             - True
             - (100)
             - 2:
-                - (10, 2) -> (qval: -10, n: 100)
+                - (10, 2) -> (qval: 0, n: 0)
         - 2 -> (q=3.4, n=3)
 
     According to UCB, the best first action is `False`, the only second action is `(10, 2)`
@@ -238,14 +247,44 @@ def construct_ucb_tree(observation_from_simulator) -> ObservationNode:
     )
 
     # one leaf action node
-    leaf_action_node = ActionNode(
-        {"qval": -10, "n": 100}, first_picked_observation_node
-    )
+    leaf_action_node = ActionNode({"qval": 0, "n": 0}, first_picked_observation_node)
     better_first_action_node.observation_node(
         observation_from_simulator
     ).add_action_node((10, 2), leaf_action_node)
 
     return root
+
+
+def run_ucb_select_leaf(observation_from_simulator, root):
+    """Runs UCB with a typical simulator from root"""
+
+    def sim(_, __):
+        """Fake simulator, returns state 0, obs 2, reward .5 and not terminal"""
+        return 0, observation_from_simulator, 0.5, False
+
+    chosen_leaf, s, obs, term, rewards = ucb_select_leaf(
+        sim=sim,
+        ucb_constant=1,
+        state=1,
+        node=root,
+    )
+    return chosen_leaf, s, obs, term, rewards
+
+
+def run_ucb_select_leaf_terminal_sim(observation_from_simulator, root):
+    """Runs UCB with a terminal simulator from root"""
+
+    def term_sim(_, __):
+        """Returns the same as :py:func:`sim` but sets terminal flag to `True`"""
+        return 0, observation_from_simulator, 0.5, True
+
+    chosen_leaf, s, obs, term, rewards = ucb_select_leaf(
+        sim=term_sim,
+        ucb_constant=1,
+        state=1,
+        node=root,
+    )
+    return chosen_leaf, s, obs, term, rewards
 
 
 def test_ucb_select_leaf():
@@ -254,15 +293,12 @@ def test_ucb_select_leaf():
     observation_from_simulator = 2
 
     root = construct_ucb_tree(observation_from_simulator)
-    leaf_action_node = root.action_node(False).observation_node(2).action_node((10, 2))
 
-    def sim(_, __):
-        """Fake simulator, returns state 0, obs 2, reward .5 and not terminal"""
-        return 0, observation_from_simulator, 0.5, False
-
-    chosen_leaf, s, obs, term, rewards = ucb_select_leaf(
-        state=1, node=root, sim=sim, ucb_constant=1
+    chosen_leaf, s, obs, term, rewards = run_ucb_select_leaf(
+        observation_from_simulator, root
     )
+
+    leaf_action_node = root.action_node(False).observation_node(2).action_node((10, 2))
 
     assert chosen_leaf is leaf_action_node, "constructed tree should lead to leaf"
     assert s == 0, "simulator always outputs 0 as state"
@@ -270,13 +306,8 @@ def test_ucb_select_leaf():
     assert not term, "simulator should indicate it is not terminal"
     assert rewards == [0.5, 0.5], "we did two steps of .5 reward"
 
-    def term_sim(_, __):
-        """Returns the same as :py:func:`sim` but sets terminal flag to `True`"""
-        s, o, r, _ = sim(None, None)
-        return s, o, r, True
-
-    chosen_leaf, s, obs, term, rewards = ucb_select_leaf(
-        state=1, node=root, sim=term_sim, ucb_constant=1
+    chosen_leaf, s, obs, term, rewards = run_ucb_select_leaf_terminal_sim(
+        observation_from_simulator, root
     )
 
     assert chosen_leaf is root.action_node(
@@ -286,3 +317,96 @@ def test_ucb_select_leaf():
     assert obs == observation_from_simulator, "better output the correct observation"
     assert term, "simulator should indicate it is not terminal"
     assert rewards == [0.5], "we did two steps of .5 reward"
+
+
+def test_backprop_running_q_assertion():
+    """Tests that :py:func:`~online_pomdp_planning.mcts.backprop_running_q` raises bad discount"""
+    with pytest.raises(AssertionError):
+        backprop_running_q(
+            -1,
+            ObservationNode(),
+            [],
+            0,
+        )
+    with pytest.raises(AssertionError):
+        backprop_running_q(
+            1.1,
+            ObservationNode(),
+            [],
+            0,
+        )
+
+
+@pytest.mark.parametrize(
+    "discount_factor, new_q_first, new_q_leaf",
+    [
+        (0, 10.3 / 4, 7.0),
+        (1, 12.3 / 4, 2),
+        # hard math, let's not do that again (3.4*3 + .1 + .9* 7 + .9*.9*-5)
+        (0.9, 12.55 / 4, 7 - 4.5),
+    ],
+)
+def test_backprop_running_q(discount_factor, new_q_first, new_q_leaf):
+    """Tests :py:func:`~online_pomdp_planning.mcts.backprop_running_q`"""
+    observation_from_simulator = 2
+    root = construct_ucb_tree(observation_from_simulator)
+
+    # fake leaf node
+    leaf_action_node = root.action_node(False).observation_node(2).action_node((10, 2))
+
+    # fake expand to get an observation node
+    expansion = ObservationNode(leaf_action_node)
+    leaf_action_node.add_observation_node("some action", expansion)
+
+    leaf_selection_output = [0.1, 7.0]
+    leaf_evaluation = -5
+    backprop_running_q(
+        discount_factor,
+        expansion,
+        leaf_selection_output,
+        leaf_evaluation,
+    )
+
+    # lots of math by hand, hope this never needs to be re-computed
+    # basically we _know_ the path taken, the rewards, and the original tree
+    # so we can compute what the updated q-values and 'n' are
+    # q-values are running average, 'n' is just incremented
+
+    assert leaf_action_node.stats["n"] == 1
+    assert leaf_action_node.stats["qval"] == pytest.approx(new_q_leaf)
+
+    first_chosen_action_node = root.action_node(False)
+
+    assert first_chosen_action_node.stats["qval"] == pytest.approx(new_q_first)
+    assert first_chosen_action_node.stats["n"] == 4
+
+
+def test_rollout():
+    """Tests :py:func:`~online_pomdp_planning.mcts.rollout`"""
+
+    pol = partial(random_policy, ([False, 1, (10, 2)]))
+    discount_factor = 0.9
+    depth = 3
+    terminal = False
+    state = 1
+    obs = 0
+
+    def sim(_, __):
+        """Fake simulator, returns state 0, obs 2, reward .5 and not terminal"""
+        return 0, 2, 0.5, False
+
+    def term_sim(_, __):
+        """Returns the same as :py:func:`sim` but sets terminal flag to `True`"""
+        return 0, 2, 0.5, True
+
+    assert rollout(pol, term_sim, depth, discount_factor, state, obs, t=True) == 0
+    assert rollout(pol, term_sim, 0, discount_factor, state, obs, terminal) == 0
+
+    assert (
+        rollout(pol, term_sim, depth, discount_factor, state, obs, terminal) == 0.5
+    ), "terminal sim should allow 1 action"
+
+    assert (
+        rollout(pol, sim, 2, discount_factor, state, obs, terminal)
+        == 0.5 + discount_factor * 0.5
+    ), "1 depth should allow 1 action"
