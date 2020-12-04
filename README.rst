@@ -18,7 +18,7 @@ Online planning methods for POMDPs
 * Free software: MIT license
 * Documentation: https://online-pomdp-planning.readthedocs.io.
 
-.. include:: docs/readme.rst
+.. include:: docs/intro.rst
 
 Credits
 -------
