@@ -1,1 +1,57 @@
-.. include:: ../README.rst
+=====================
+online-pomdp-planning
+=====================
+
+.. include:: intro.rst
+
+This library implements a set of these methods:
+
+.. toctree::
+   :maxdepth: 1
+
+   methods/mcts
+   methods/despot
+   methods/f3s
+
+.. provided in this package
+
+Concretely, this package provides factory functions to construct
+:py:class:`~online_pomdp_planning.types.Planner`. A planner is a function that
+is called with a :py:class:`~online_pomdp_planning.types.Belief`, and returns a
+:py:class:`~online_pomdp_planning.types.Action`.
+
+.. automethod:: online_pomdp_planning.types.Planner.__call__
+   :noindex:
+
+Types
+-----
+
+I am unreasonably terrified of dynamic typed languages and have gone to
+extremes to define as many as possible. Most of these are for internal use, but
+you will come across some as a user of this library. Most of these types will
+have no actual meaning, in particular:
+
+.. autosummary::
+   :nosignatures:
+
+   online_pomdp_planning.types.Action
+   online_pomdp_planning.types.Observation
+   online_pomdp_planning.types.State
+
+.. meaningless types: `Action`, `Observation` & `State`
+
+Are domain specific and unimportant. All that is required is that the
+:py:class:`~online_pomdp_planning.types.Action` and
+:py:class:`~online_pomdp_planning.types.Observation` are `hashable`. The
+:py:class:`~online_pomdp_planning.types.State` is not used by the library code
+whatsoever.
+
+.. `Belief` type
+
+A notable exception is the :py:class:`~online_pomdp_planning.types.Belief`,
+which is assumed to a callable that produces states. This represent that we
+assume the belief is a way of sampling states.
+
+.. automethod:: online_pomdp_planning.types.Belief.__call__
+   :noindex:
+
