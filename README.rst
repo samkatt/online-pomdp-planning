@@ -18,11 +18,6 @@ Online planning methods for POMDPs
 * Free software: MIT license
 * Documentation: https://online-pomdp-planning.readthedocs.io.
 
-Online planning methods for POMDPs
-
-* Free software: MIT license
-* Documentation: https://online-pomdp-planning.readthedocs.io.
-
 .. POMDPs
 
 Partially observable Markov decision processes (POMDP
