@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import random
 from copy import deepcopy
+from functools import partial
 from math import log, sqrt
 from typing import Any, Dict, Iterator, List, Optional, Protocol, Tuple
 
@@ -495,13 +496,13 @@ def pick_max_q(stats: Dict[Action, Any]):
 
 
 def mcts(
-    belief: Belief,
-    n_sims: int,
     leaf_select: LeafSelection,
     expand: Expansion,
     evaluate: Evaluation,
     backprop: BackPropagation,
     action_select: ActionSelection,
+    belief: Belief,
+    n_sims: int,
 ):
     """The general MCTS method, defined by its components
 
@@ -515,10 +516,6 @@ def mcts(
     After spending the simulation budget, it picks an given the statistics
     stored in the root node through `action_select`.
 
-    :param belief: the current belief (over the state) at the root node
-    :type belief: Belief
-    :param n_sims: number of simulations to run
-    :type n_sims: int
     :param leaf_select: the method for selecting leaf nodes
     :type leaf_select: LeafSelection
     :param expand: the leaf expansion method
@@ -529,6 +526,10 @@ def mcts(
     :type backprop: BackPropagation
     :param action_select: the method for picking an action given root node
     :type action_select: ActionSelection
+    :param belief: the current belief (over the state) at the root node
+    :type belief: Belief
+    :param n_sims: number of simulations to run
+    :type n_sims: int
     :return: the preferred action
     :rtype: Action
     """
@@ -552,3 +553,48 @@ def mcts(
         backprop(expanded_node, selection_output, evaluation)
 
     return action_select(root_node.child_stats)
+
+
+def create_POUCT(
+    actions: List[Action],
+    sim: Simulator,
+    init_stats: Any = None,
+    policy: Optional[Policy] = None,  # pylint: disable=E1136
+    ucb_constant: float = 1,
+    rollout_depth: int = 100,
+    discount_factor: float = 0.95,
+):
+    """Creates PO-UCT given the available actions and a simulator
+
+    Returns an instance of :py:func:`mcts` where the components have been
+    filled in.
+
+    :param actions: all the actions available to the agent
+    :type actions: List[Action]
+    :param sim: a simulator of the environment
+    :type sim: Simulator
+    :param init_stats: how to initialize node statistics, defaults to None which sets Q and n to 0
+    :type init_stats: Any
+    :param policy: the rollout policy, defaults to None, which sets a random policy
+    :type policy: Optional[Policy]
+    :param ucb_constant: exploration constant used in UCB, defaults to 1
+    :type ucb_constant: Optional[float]
+    :param rollout_depth: the depth a rollout will go up to, defaults to 100
+    :type rollout_depth: Optional[int]
+    :param discount_factor: the discount factor of the environment, defaults to 0.95
+    :type discount_factor: Optional[float]
+    """
+
+    # defaults
+    if not policy:
+        policy = partial(random_policy, actions)
+    if not init_stats:
+        init_stats = {"qval": 0, "n": 0}
+
+    leaf_select = partial(ucb, sim, ucb_constant)
+    expansion = partial(expand_node_with_all_actions, actions, init_stats)
+    evaluation = partial(rollout, policy, sim, rollout_depth, discount_factor)
+    backprop = partial(backprop_running_q, discount_factor)
+    action_select = pick_max_q
+
+    return partial(mcts, leaf_select, expansion, evaluation, backprop, action_select)

@@ -17,9 +17,10 @@ implementation where the components are:
 - action selector :py:func:`~online_pomdp_planning.mcts.pick_max_q`:
     - picks the action with max q value
 
-.. todo::
+We provide a relatively easy way of constructing PO-UCT for your usage through
 
-    provide and describe constructor
+.. autofunction:: online_pomdp_planning.mcts.create_POUCT
+   :noindex:
 
 .. [silver_monte-carlo_2010] Silver, David, and Joel Veness. "Monte-Carlo
    planning in large POMDPs.“ Advances in neural information processing
