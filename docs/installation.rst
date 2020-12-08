@@ -5,22 +5,24 @@ Installation
 ============
 
 
-Stable release
---------------
+This package is not published through pip.
 
-To install online-pomdp-planning, run this command in your terminal:
+.. Stable release
+.. --------------
 
-.. code-block:: console
+.. To install online-pomdp-planning, run this command in your terminal:
 
-    $ pip install online_pomdp_planning
+.. .. code-block:: console
 
-This is the preferred method to install online-pomdp-planning, as it will always install the most recent stable release.
+..     $ pip install online_pomdp_planning
 
-If you don't have `pip`_ installed, this `Python installation guide`_ can guide
-you through the process.
+.. This is the preferred method to install online-pomdp-planning, as it will always install the most recent stable release.
 
-.. _pip: https://pip.pypa.io
-.. _Python installation guide: http://docs.python-guide.org/en/latest/starting/installation/
+.. If you don't have `pip`_ installed, this `Python installation guide`_ can guide
+.. you through the process.
+
+.. .. _pip: https://pip.pypa.io
+.. .. _Python installation guide: http://docs.python-guide.org/en/latest/starting/installation/
 
 
 From sources
@@ -46,6 +48,11 @@ Once you have a copy of the source, you can install it with:
 
     $ python setup.py install
 
+Or:
+
+.. code-block:: console
+
+    $ python -m pip install .
 
 .. _Github repo: https://github.com/samdjo/online_pomdp_planning
 .. _tarball: https://github.com/samdjo/online_pomdp_planning/tarball/master
