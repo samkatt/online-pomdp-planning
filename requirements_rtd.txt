@@ -1,1 +1,2 @@
 sphinx-theme==1.0
+typing-extensions

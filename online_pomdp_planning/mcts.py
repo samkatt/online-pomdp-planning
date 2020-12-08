@@ -5,7 +5,9 @@ import random
 from copy import deepcopy
 from functools import partial
 from math import log, sqrt
-from typing import Any, Dict, Iterator, List, Optional, Protocol, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
+
+from typing_extensions import Protocol
 
 from online_pomdp_planning.types import Action, Belief, Observation, Simulator, State
 

@@ -1,6 +1,8 @@
 """Defines some types for ease of reading"""
 
-from typing import Protocol, Tuple
+from typing import Tuple
+
+from typing_extensions import Protocol
 
 
 class Action(Protocol):
