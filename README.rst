@@ -2,7 +2,7 @@
 online-pomdp-planning
 =====================
 
-.. image:: https://img.shields.io/travis/samkatt/online_pomdp_planning.svg
+.. image:: https://travis-ci.com/samkatt/online_pomdp_planning.svg?branch=master
         :target: https://travis-ci.com/samkatt/online_pomdp_planning
 
 .. image:: https://readthedocs.org/projects/online-pomdp-planning/badge/?version=latest
