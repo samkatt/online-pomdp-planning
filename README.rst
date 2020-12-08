@@ -2,8 +2,8 @@
 online-pomdp-planning
 =====================
 
-.. image:: https://travis-ci.com/samkatt/online_pomdp_planning.svg?branch=master
-        :target: https://travis-ci.com/samkatt/online_pomdp_planning
+.. image:: https://travis-ci.com/samkatt/online-pomdp-planning.svg?branch=master
+       :target: https://travis-ci.com/samkatt/online-pomdp-planning
 
 .. image:: https://readthedocs.org/projects/online-pomdp-planning/badge/?version=latest
         :target: https://online-pomdp-planning.readthedocs.io/en/latest/?badge=latest
