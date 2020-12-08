@@ -25,10 +25,9 @@ class Tiger:
     @staticmethod
     def sample_observation(s: State) -> Observation:
         """85% hear tiger correctly"""
-
-    @staticmethod
-    def get_reward(s: State, a: Action) -> float:
-        """TODO"""
+        if random.uniform(0, 1) < 0.85:
+            return s
+        return int(not s)
 
     @staticmethod
     def sim(s: State, a: Action) -> Tuple[State, Observation, float, bool]:

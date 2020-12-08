@@ -34,7 +34,13 @@ For this it requires a belief, a probability distribution over the current
 state. The planner takes a current belief of the current state of the
 environment and a simulator, and spits out its favorite action.
 
-This library provides APIs and implementation of such algorithms.
+This library provides APIs and implementation of **planners**.
+
+.. todo::
+
+    - Write out features
+    - Link to documentation
+    - Link to usage
 
 .. [kaelbling_planning_1998] Kaelbling, Leslie Pack, Michael L. Littman, and
    Anthony R. Cassandra. “Planning and acting in partially observable
