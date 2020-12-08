@@ -9,7 +9,7 @@ online-pomdp-planning
         :target: https://online-pomdp-planning.readthedocs.io/en/latest/?badge=latest
         :alt: Documentation Status
 
-Online planning methods for POMDPs
+Online planning methods for POMDPs, hosted on Github_
 
 
 * Free software: MIT license
@@ -50,3 +50,4 @@ This package was created with Cookiecutter_ and the `audreyr/cookiecutter-pypack
 
 .. _Cookiecutter: https://github.com/audreyr/cookiecutter
 .. _`audreyr/cookiecutter-pypackage`: https://github.com/audreyr/cookiecutter-pypackage
+.. _Github: https://github.com/samkatt/online-pomdp-planning
