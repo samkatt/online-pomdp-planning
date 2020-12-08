@@ -107,9 +107,5 @@ ENV/
 # tags
 tags
 
-# auto generated docs
-docs/online_pomdp_planning*.rst
-docs/modules.rst
-
 # personal
 .vimlocal
