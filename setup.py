@@ -44,6 +44,7 @@ setup(
     keywords='online_pomdp_planning',
     name='online_pomdp_planning',
     packages=find_packages(include=['online_pomdp_planning', 'online_pomdp_planning.*']),
+    package_data={'online_pomdp_planning': ['py.typed']},
     setup_requires=setup_requirements,
     test_suite='tests',
     tests_require=test_requirements,
