@@ -5,7 +5,7 @@ import random
 from copy import deepcopy
 from functools import partial
 from math import log, sqrt
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Sequence
 
 from typing_extensions import Protocol
 
@@ -319,13 +319,13 @@ class Policy(Protocol):
         """
 
 
-def random_policy(actions: List[Action], _: State, __: Observation) -> Action:
+def random_policy(actions: Sequence[Action], _: State, __: Observation) -> Action:
     """A random policy just picks a random action
 
     Implements :py:class:`Policy` given `actions`
 
     :param actions: list of actions to pick randomly from
-    :type actions: List[Action]
+    :type actions: Sequence[Action]
     :param _: ignored (state)
     :type _: State
     :param __: ignored (observation)
@@ -597,7 +597,7 @@ def mcts(
 
 
 def create_POUCT(
-    actions: List[Action],
+    actions: Sequence[Action],
     sim: Simulator,
     init_stats: Any = None,
     policy: Optional[Policy] = None,  # pylint: disable=E1136
@@ -611,7 +611,7 @@ def create_POUCT(
     filled in.
 
     :param actions: all the actions available to the agent
-    :type actions: List[Action]
+    :type actions: Sequence[Action]
     :param sim: a simulator of the environment
     :type sim: Simulator
     :param init_stats: how to initialize node statistics, defaults to None which sets Q and n to 0
