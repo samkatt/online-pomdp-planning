@@ -5,11 +5,18 @@ import random
 from copy import deepcopy
 from functools import partial
 from math import log, sqrt
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Sequence
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from typing_extensions import Protocol
 
-from online_pomdp_planning.types import Action, Belief, Observation, Simulator, State
+from online_pomdp_planning.types import (
+    Action,
+    Belief,
+    Observation,
+    Planner,
+    Simulator,
+    State,
+)
 
 
 class ActionNode:
@@ -539,12 +546,12 @@ def mcts(
     evaluate: Evaluation,
     backprop: BackPropagation,
     action_select: ActionSelection,
+    num_sims: int,
     belief: Belief,
-    n_sims: int,
 ):
     """The general MCTS method, defined by its components
 
-    MCTS will run `n_sims` simulations, where each simulation:
+    MCTS will run `num_sims` simulations, where each simulation:
 
     #. Selects a leaf (action) node through `leaf_select`
     #. Expands the leaf node through `expand`
@@ -568,18 +575,18 @@ def mcts(
     :type backprop: BackPropagation
     :param action_select: the method for picking an action given root node
     :type action_select: ActionSelection
+    :param num_sims: number of simulations to run
+    :type num_sims: int
     :param belief: the current belief (over the state) at the root node
     :type belief: Belief
-    :param n_sims: number of simulations to run
-    :type n_sims: int
     :return: the preferred action
     :rtype: Action
     """
-    assert n_sims >= 0, "MCTS requires a positive number of simulations"
+    assert num_sims >= 0, "MCTS requires a positive number of simulations"
 
     root_node = tree_constructor()
 
-    for _ in range(0, n_sims):
+    for _ in range(0, num_sims):
         state = belief()
         leaf: ActionNode
 
@@ -599,12 +606,13 @@ def mcts(
 def create_POUCT(
     actions: Sequence[Action],
     sim: Simulator,
+    num_sims: int,
     init_stats: Any = None,
     policy: Optional[Policy] = None,  # pylint: disable=E1136
     ucb_constant: float = 1,
     rollout_depth: int = 100,
     discount_factor: float = 0.95,
-):
+) -> Planner:
     """Creates PO-UCT given the available actions and a simulator
 
     Returns an instance of :py:func:`mcts` where the components have been
@@ -614,6 +622,8 @@ def create_POUCT(
     :type actions: Sequence[Action]
     :param sim: a simulator of the environment
     :type sim: Simulator
+    :param num_sims: number of simulations to run
+    :type num_sims: int
     :param init_stats: how to initialize node statistics, defaults to None which sets Q and n to 0
     :type init_stats: Any
     :param policy: the rollout policy, defaults to None, which sets a random policy
@@ -624,7 +634,11 @@ def create_POUCT(
     :type rollout_depth: Optional[int]
     :param discount_factor: the discount factor of the environment, defaults to 0.95
     :type discount_factor: Optional[float]
+    :return: MCTS with planner signature (given num sims)
+    :rtype: Planner
     """
+
+    assert num_sims > 0
 
     # defaults
     if not policy:
@@ -649,4 +663,5 @@ def create_POUCT(
         evaluation,
         backprop,
         action_select,
+        num_sims,
     )
