@@ -12,6 +12,7 @@ from online_pomdp_planning.mcts import (
     backprop_running_q,
     create_root_node_with_child_for_all_actions,
     expand_node_with_all_actions,
+    has_simulated_n_times,
     pick_max_q,
     random_policy,
     rollout,
@@ -107,6 +108,27 @@ def test_observation_child_stats():
         action_1: child_1.stats,
         action_2: child_2.stats,
     }
+
+
+@pytest.mark.parametrize(
+    "n,it,expectation", [(5, 4, False), (5, 5, True), (5, 6, True), (0, 0, True)]
+)
+def test_has_simulated_n_times(n, it, expectation):
+    """Tests :py:func:`online_pomdp_planning.mcts.has_simulated_n_times`"""
+    assert has_simulated_n_times(n, {"iteration": it}) == expectation
+
+
+def test_has_simulated_n_times_asserts():
+    """Tests :py:func:`online_pomdp_planning.mcts.has_simulated_n_times` assertions"""
+
+    with pytest.raises(AssertionError):
+        has_simulated_n_times(-1, {"iteration": 0})
+
+    with pytest.raises(AssertionError):
+        has_simulated_n_times(1, {"iteration": -1})
+
+    with pytest.raises(KeyError):
+        has_simulated_n_times(10, {"iteration_typo": 100})
 
 
 @pytest.mark.parametrize(

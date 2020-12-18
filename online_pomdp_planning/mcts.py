@@ -130,6 +130,42 @@ class ObservationNode:
         return self.action_nodes[action]
 
 
+class StopCondition(Protocol):
+    """The protocol for a stop condition during MCTS
+
+    Determines, given :py:class:`online_pomdp_planning.types.Info`, whether to
+    continue simulating or not.
+
+    .. automethod:: __call__
+    """
+
+    def __call__(self, info: Info) -> bool:
+        """Signature for the stop condition
+
+        Determines, given info, whether to stop or not
+
+        :param info: run time information
+        :type info: Info
+        :return: ``True`` if determined stop condition is met
+        :rtype: bool
+        """
+
+
+def has_simulated_n_times(n: int, info: Info) -> bool:
+    """Returns true if number of iterations in ``info`` exceeds ``n``
+
+    :param n: number to have iterated
+    :type n: int
+    :param info: run time info (assumed to have entry "iteration" -> int)
+    :type info: Info
+    :return: true if number of iterations exceed ``n``
+    :rtype: bool
+    """
+    assert n >= 0 and info["iteration"] >= 0
+
+    return n <= info["iteration"]
+
+
 class LeafSelection(Protocol):
     """The signature for leaf selection
 
@@ -566,18 +602,19 @@ def create_root_node_with_child_for_all_actions(
 
 
 def mcts(
+    stop_cond: StopCondition,
     tree_constructor: TreeConstructor,
     leaf_select: LeafSelection,
     expand: Expansion,
     evaluate: Evaluation,
     backprop: BackPropagation,
     action_select: ActionSelection,
-    num_sims: int,
     belief: Belief,
 ) -> Tuple[Action, Info]:
     """The general MCTS method, defined by its components
 
-    MCTS will run `num_sims` simulations, where each simulation:
+    MCTS will simulate until ``stop_cond`` returns False, where each
+    simulation:
 
     #. Selects a leaf (action) node through `leaf_select`
     #. Expands the leaf node through `expand`
@@ -595,6 +632,8 @@ def mcts(
     in turn can populate them however they would like. Finally this is
     returned, and thus can be used for reporting and debugging like.
 
+    :param stop_cond: the function that returns whether simulating should stop
+    :type stop_cond: StopCondition
     :param tree_constructor: constructor the tree
     :type tree_constructor: TreeConstructor
     :param leaf_select: the method for selecting leaf nodes
@@ -607,20 +646,17 @@ def mcts(
     :type backprop: BackPropagation
     :param action_select: the method for picking an action given root node
     :type action_select: ActionSelection
-    :param num_sims: number of simulations to run
-    :type num_sims: int
     :param belief: the current belief (over the state) at the root node
     :type belief: Belief
     :return: the preferred action and run time information (e.g. # simulations)
     :rtype: Tuple[Action, Info]
     """
-    assert num_sims >= 0, "MCTS requires a positive number of simulations"
 
     info: Info = {"iteration": 0}
 
     root_node = tree_constructor()
 
-    for _ in range(0, num_sims):
+    while not stop_cond(info):
 
         state = belief()
         leaf: ActionNode
@@ -694,11 +730,11 @@ def create_POUCT(
 
     return partial(
         mcts,
+        partial(has_simulated_n_times, num_sims),
         tree_constructor,
         leaf_select,
         expansion,
         evaluation,
         backprop,
         action_select,
-        num_sims,
     )

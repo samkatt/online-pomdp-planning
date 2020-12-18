@@ -42,6 +42,7 @@ Implementation details
 This library implements MCTS as a combination of:
 
 #. `Tree construction`_
+#. `Stop condition`_
 #. `Leaf selection`_
 #. `Leaf expansion`_
 #. `Leaf Evaluation`_
@@ -66,6 +67,21 @@ the first set of action nodes, one for each action.
 Provided implementations:
 
     - :py:func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`
+
+
+Stop condition
+--------------
+
+This function determines when MCTS stops. Typically this can either be a timer,
+or a desired number of simulations.
+
+.. autofunction:: online_pomdp_planning.mcts.StopCondition.__call__
+   :noindex:
+
+Provided implementations:
+
+    - :py:func:`~online_pomdp_planning.mcts.has_simulated_n_times`
+
 
 Leaf selection
 --------------

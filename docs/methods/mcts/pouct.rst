@@ -7,6 +7,8 @@ implementation where the components are:
 
 - root node construct: :py:func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`
     - simply initiates a action node for each action
+- stop condition: :py:func:`~online_pomdp_planning.mcts.has_simulated_n_times`
+    - simulate exactly ``n`` times
 - leaf selection :py:func:`~online_pomdp_planning.mcts.ucb_select_leaf`
     - action generation: upper-confidence bound for action selection
     - observation generation: simulator for observation generator
