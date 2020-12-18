@@ -18,7 +18,7 @@ implementation where the components are:
     - rollout of some policy given a simulator (default is random)
 - back propagation :py:func:`~online_pomdp_planning.mcts.backprop_running_q`:
     - running Q-average
-- action selector :py:func:`~online_pomdp_planning.mcts.pick_max_q`:
+- action selector :py:func:`~online_pomdp_planning.mcts.max_q_action_selector`:
     - picks the action with max q value
 
 We provide a relatively easy way of constructing PO-UCT for your usage through

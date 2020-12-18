@@ -606,28 +606,40 @@ class ActionSelection(Protocol):
     .. automethod:: __call__
     """
 
-    def __call__(self, stats: Dict[Action, Any]) -> Action:
+    def __call__(self, stats: Dict[Action, Any], info: Info) -> Action:
         """Selects the preferred action given statistics
 
 
         :param stats: statistics of the (root) node
         :type stats: Dict[Action, Any]
+        :param info: run time information
+        :type info: Info
         :return: preferred action
         :rtype: Action
         """
 
 
-def pick_max_q(stats: Dict[Action, Any]):
+def max_q_action_selector(stats: Dict[Action, Any], info: Info) -> Action:
     """Picks the action with the highest 'q-value' in their statistics
 
     Assumes stats has a ['qval'] attribute
 
     Implements :py:class:`ActionSelection`
 
+    Adds ranking to ``info["max_q_action_selector-values"]``, which is a sorted
+    list (by q-value) of action-stats pairs
+
     :param stats: assumes a "q" property in the statistic
     :type stats: Dict[Action, Any]
+    :param info: run time information (adds "max_q_action_selector-values")
+    :type info: Info
+    :return: action with highest q value
+    :rtype: Action
     """
-    return max(stats, key=lambda k: stats[k]["qval"])  # type: ignore
+    info["max_q_action_selector-values"] = sorted(
+        stats.items(), key=lambda item: item[1]["qval"], reverse=True
+    )
+    return info["max_q_action_selector-values"][0][0]
 
 
 class TreeConstructor(Protocol):
@@ -737,7 +749,7 @@ def mcts(
 
         info["iteration"] += 1
 
-    return action_select(root_node.child_stats), info
+    return action_select(root_node.child_stats, info), info
 
 
 def create_POUCT(
@@ -800,7 +812,7 @@ def create_POUCT(
     expansion = partial(expand_node_with_all_actions, actions, init_stats)
     evaluation = partial(rollout, policy, sim, rollout_depth, discount_factor)
     backprop = partial(backprop_running_q, discount_factor)
-    action_select = pick_max_q
+    action_select = max_q_action_selector
 
     return partial(
         mcts,

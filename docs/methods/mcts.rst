@@ -161,7 +161,7 @@ in the root node.
 
 Provided implementations:
 
-    - :py:func:`~online_pomdp_planning.mcts.pick_max_q` picks the action with max q value
+    - :py:func:`~online_pomdp_planning.mcts.max_q_action_selector` picks the action with max q value
 
 A common method is to pick the action with highest associated average return.
 

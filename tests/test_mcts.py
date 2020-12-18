@@ -13,7 +13,7 @@ from online_pomdp_planning.mcts import (
     create_root_node_with_child_for_all_actions,
     expand_node_with_all_actions,
     has_simulated_n_times,
-    pick_max_q,
+    max_q_action_selector,
     random_policy,
     rollout,
     select_with_ucb,
@@ -158,9 +158,14 @@ def test_create_root_node_with_child_for_all_actions(actions, init_stats):
         ({True: {"qval": 100}, 0: {"qval": 0.1}, 10: {"qval": 1}}, True),
     ],
 )
-def test_maxq(stats, max_a):
-    """tests :py:func:~online_pomdp_planning.mcts.pick_max_q"""
-    assert pick_max_q(stats) == max_a
+def test_max_q_action_selector(stats, max_a):
+    """tests :py:func:~online_pomdp_planning.mcts.max_q_action_selector"""
+    info = {}
+    assert max_q_action_selector(stats, info) == max_a
+
+    sorted_q_vals = info["max_q_action_selector-values"]
+    assert sorted_q_vals[0][0] == max_a
+    assert len(sorted_q_vals) == len(stats)
 
 
 @pytest.mark.parametrize(
