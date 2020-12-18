@@ -63,8 +63,16 @@ def tiger_right_belief():
 def test_pouct():
     """tests :py:func:`~online_pomdp_planning.mcts.create_POUCT` on Tiger"""
 
-    planner = create_POUCT(Tiger.actions(), Tiger.sim, 16384, ucb_constant=100)
+    planner = create_POUCT(Tiger.actions(), Tiger.sim, 2 * 16384, ucb_constant=100)
 
-    assert planner(uniform_tiger_belief) == Tiger.H
-    assert planner(tiger_left_belief) == Tiger.L
-    assert planner(tiger_right_belief) == Tiger.R
+    action, info = planner(uniform_tiger_belief)
+    assert action == Tiger.H
+    assert info["iteration"] == 16384 * 2
+
+    planner = create_POUCT(Tiger.actions(), Tiger.sim, 16384, ucb_constant=100)
+    action, info = planner(tiger_left_belief)
+    assert action == Tiger.L
+    assert info["iteration"] == 16384
+
+    action, info = planner(tiger_right_belief)
+    assert action == Tiger.R

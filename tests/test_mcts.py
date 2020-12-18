@@ -154,12 +154,7 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     stats = 0
     node = ActionNode(stats, parent)
 
-    expand_node_with_all_actions(
-        actions,
-        init_stats,
-        o,
-        node,
-    )
+    expand_node_with_all_actions(actions, init_stats, o, node, {})
 
     expansion = node.observation_node(o)
 
@@ -283,10 +278,7 @@ def run_ucb_select_leaf(observation_from_simulator, root):
         return 0, observation_from_simulator, 0.5, False
 
     chosen_leaf, s, obs, term, rewards = ucb_select_leaf(
-        sim=sim,
-        ucb_constant=1,
-        state=1,
-        node=root,
+        sim=sim, ucb_constant=1, state=1, node=root, info={}
     )
     return chosen_leaf, s, obs, term, rewards
 
@@ -299,10 +291,7 @@ def run_ucb_select_leaf_terminal_sim(observation_from_simulator, root):
         return 0, observation_from_simulator, 0.5, True
 
     chosen_leaf, s, obs, term, rewards = ucb_select_leaf(
-        sim=term_sim,
-        ucb_constant=1,
-        state=1,
-        node=root,
+        sim=term_sim, ucb_constant=1, state=1, node=root, info={}
     )
     return chosen_leaf, s, obs, term, rewards
 
@@ -343,19 +332,9 @@ def test_backprop_running_q_assertion():
     """Tests that :py:func:`~online_pomdp_planning.mcts.backprop_running_q` raises bad discount"""
     some_obs_node = ObservationNode()
     with pytest.raises(AssertionError):
-        backprop_running_q(
-            -1,
-            ActionNode("gargabe", some_obs_node),
-            [],
-            0,
-        )
+        backprop_running_q(-1, ActionNode("gargabe", some_obs_node), [], 0, {})
     with pytest.raises(AssertionError):
-        backprop_running_q(
-            1.1,
-            ActionNode("gargabe", some_obs_node),
-            [],
-            0,
-        )
+        backprop_running_q(1.1, ActionNode("gargabe", some_obs_node), [], 0, {})
 
 
 @pytest.mark.parametrize(
@@ -378,10 +357,7 @@ def test_backprop_running_q(discount_factor, new_q_first, new_q_leaf):
     leaf_selection_output = [0.1, 7.0]
     leaf_evaluation = -5
     backprop_running_q(
-        discount_factor,
-        leaf_node,
-        leaf_selection_output,
-        leaf_evaluation,
+        discount_factor, leaf_node, leaf_selection_output, leaf_evaluation, {}
     )
 
     # lots of math by hand, hope this never needs to be re-computed
@@ -416,14 +392,16 @@ def test_rollout():
         """Returns the same as :py:func:`sim` but sets terminal flag to `True`"""
         return 0, 2, 0.5, True
 
-    assert rollout(pol, term_sim, depth, discount_factor, state, obs, t=True) == 0
-    assert rollout(pol, term_sim, 0, discount_factor, state, obs, terminal) == 0
+    assert (
+        rollout(pol, term_sim, depth, discount_factor, state, obs, t=True, info={}) == 0
+    )
+    assert rollout(pol, term_sim, 0, discount_factor, state, obs, terminal, {}) == 0
 
     assert (
-        rollout(pol, term_sim, depth, discount_factor, state, obs, terminal) == 0.5
+        rollout(pol, term_sim, depth, discount_factor, state, obs, terminal, {}) == 0.5
     ), "terminal sim should allow 1 action"
 
     assert (
-        rollout(pol, sim, 2, discount_factor, state, obs, terminal)
+        rollout(pol, sim, 2, discount_factor, state, obs, terminal, {})
         == 0.5 + discount_factor * 0.5
     ), "1 depth should allow 1 action"

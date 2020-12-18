@@ -12,6 +12,7 @@ from typing_extensions import Protocol
 from online_pomdp_planning.types import (
     Action,
     Belief,
+    Info,
     Observation,
     Planner,
     Simulator,
@@ -136,13 +137,15 @@ class LeafSelection(Protocol):
     """
 
     def __call__(
-        self, s: State, node: ObservationNode
+        self, s: State, node: ObservationNode, info: Info
     ) -> Tuple[ActionNode, State, Observation, bool, Any]:
         """Traverses through the tree and picks a leaf
 
         :type s: State
         :param node: (root) node
         :type node: ObservationNode
+        :param info: run time information
+        :type info: Info
         :return: leaf node, state and obs, terminal flag and input to :py:class:`BackPropagation`
         :rtype: Tuple[ActionNode, State, Observation, bool, Any]
         """
@@ -192,10 +195,7 @@ def select_with_ucb(stats: Dict[Action, Any], ucb_constant: float) -> Action:
 
 
 def ucb_select_leaf(
-    sim: Simulator,
-    ucb_constant: float,
-    state: State,
-    node: ObservationNode,
+    sim: Simulator, ucb_constant: float, state: State, node: ObservationNode, info: Info
 ) -> Tuple[ActionNode, State, Observation, bool, List[float]]:
     """Tree policy according to UCB: ucb to pick actions, simulator to generate observations
 
@@ -216,6 +216,8 @@ def ucb_select_leaf(
     :type state: State
     :param node: the root node
     :type node: ObservationNode
+    :param info: run time information (ignored)
+    :type info: Info
     :return: leaf node, state, observation, terminal flag and list of rewards
     :rtype: Tuple[ActionNode, State, Observation, List[float]]
     """
@@ -246,13 +248,15 @@ class Expansion(Protocol):
     .. automethod:: __call__
     """
 
-    def __call__(self, o: Observation, a: ActionNode):
+    def __call__(self, o: Observation, a: ActionNode, info: Info):
         """Expands a leaf node
 
         :param o: observation that resulted in leaf
         :type o: Observation
         :param a: action that resulted in leaf
         :type a: ActionNode
+        :param info: run time information
+        :type info: Info
         :return: nothing, modifies the tree
         :rtype: None
         """
@@ -263,6 +267,7 @@ def expand_node_with_all_actions(
     init_stats: Any,
     o: Observation,
     action_node: ActionNode,
+    info: Info,
 ):
     """Adds an observation node to the tree with a child for each action
 
@@ -280,6 +285,8 @@ def expand_node_with_all_actions(
     :type o: Observation
     :param action_node: the current leaf node
     :type action_node: ActionNode
+    :param info: run time information (ignored)
+    :type info: Info
     :return: modifies tree
     :rtype: None
     """
@@ -297,7 +304,7 @@ class Evaluation(Protocol):
     .. automethod:: __call__
     """
 
-    def __call__(self, s: State, o: Observation, t: bool) -> Any:
+    def __call__(self, s: State, o: Observation, t: bool, info: Info) -> Any:
         """Evaluates a leaf node
 
         :param s: state to evaluate
@@ -306,6 +313,8 @@ class Evaluation(Protocol):
         :type o: Observation
         :param t: whether the episode terminated
         :type t: bool
+        :param info: run time information
+        :type info: Info
         :return: evaluation, can be whatever, given to :py:class:`BackPropagation`
         :rtype: Any
         """
@@ -351,6 +360,7 @@ def rollout(
     s: State,
     o: Observation,
     t: bool,
+    info: Info,
 ) -> float:
     """Performs a rollout in `sim` according to `policy`
 
@@ -358,6 +368,9 @@ def rollout(
     implements :py:class:`Evaluation` where it returns a float as metric
 
     When the terminal flag `t` is set, this function will return 0.
+
+    Given ``policy``, ``sim``, ``depth``, and ``discount_factor``, this
+    implements :py:class`Evaluation`
 
     :param policy:
     :type policy: Policy
@@ -373,6 +386,8 @@ def rollout(
     :type o: Observation
     :param t: whether the episode has terminated
     :type t: bool
+    :param info: run time information (ignored)
+    :type info: Info
     :return: the discounted return of following `policy` in `sim`
     :rtype: float
     """
@@ -405,7 +420,11 @@ class BackPropagation(Protocol):
     """
 
     def __call__(
-        self, n: ActionNode, leaf_selection_output: Any, leaf_eval_output: Any
+        self,
+        n: ActionNode,
+        leaf_selection_output: Any,
+        leaf_eval_output: Any,
+        info: Info,
     ) -> None:
         """Updates the nodes visited during selection
 
@@ -415,6 +434,8 @@ class BackPropagation(Protocol):
         :type leaf_selection_output: Any
         :param leaf_eval_output: The output of the evaluation method
         :type leaf_eval_output: Any
+        :param info: run time information
+        :type info: Info
         :return: has only side effects
         :rtype: None
         """
@@ -425,8 +446,11 @@ def backprop_running_q(
     leaf: ActionNode,
     leaf_selection_output: List[float],
     leaf_evaluation: float,
+    info: Info,
 ) -> None:
     """Updates running Q average of visited nodes
+
+    Implements :py:class:`BackPropagation`
 
     Updates the visited nodes (through parents of `leaf`) by updating the running
     Q average. Assumes the statistics in nodes have mappings "qval" -> float
@@ -444,6 +468,8 @@ def backprop_running_q(
     :type leaf_selection_output: List[float]
     :param leaf_evaluation: return estimate
     :type leaf_evaluation: float
+    :param info: run time information (ignored)
+    :type info: Info
     :return: has only side effects
     :rtype: None
     """
@@ -548,7 +574,7 @@ def mcts(
     action_select: ActionSelection,
     num_sims: int,
     belief: Belief,
-):
+) -> Tuple[Action, Info]:
     """The general MCTS method, defined by its components
 
     MCTS will run `num_sims` simulations, where each simulation:
@@ -562,6 +588,12 @@ def mcts(
     stored in the root node through `action_select`.
 
     The root node constructor allows for custom ways of initiating the tree
+
+    During run time will maintain information
+    :py:class`~online-pomdp-planning.types.Info`, with "iteration" -> #
+    simulations run. This is passed to all the major components of MCTS, which
+    in turn can populate them however they would like. Finally this is
+    returned, and thus can be used for reporting and debugging like.
 
     :param tree_constructor: constructor the tree
     :type tree_constructor: TreeConstructor
@@ -579,28 +611,33 @@ def mcts(
     :type num_sims: int
     :param belief: the current belief (over the state) at the root node
     :type belief: Belief
-    :return: the preferred action
-    :rtype: Action
+    :return: the preferred action and run time information (e.g. # simulations)
+    :rtype: Tuple[Action, Info]
     """
     assert num_sims >= 0, "MCTS requires a positive number of simulations"
+
+    info: Info = {"iteration": 0}
 
     root_node = tree_constructor()
 
     for _ in range(0, num_sims):
+
         state = belief()
         leaf: ActionNode
 
         leaf, state, obs, terminal_flag, selection_output = leaf_select(
-            state, root_node
+            state, root_node, info
         )
 
         if not terminal_flag:
-            expand(obs, leaf)
+            expand(obs, leaf, info)
 
-        evaluation = evaluate(state, obs, terminal_flag)
-        backprop(leaf, selection_output, evaluation)
+        evaluation = evaluate(state, obs, terminal_flag, info)
+        backprop(leaf, selection_output, evaluation, info)
 
-    return action_select(root_node.child_stats)
+        info["iteration"] += 1
+
+    return action_select(root_node.child_stats), info
 
 
 def create_POUCT(

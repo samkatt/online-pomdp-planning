@@ -20,9 +20,10 @@
 import os
 import sys
 
+import online_pomdp_planning
+
 sys.path.insert(0, os.path.abspath(".."))
 
-import online_pomdp_planning
 
 # -- General configuration ---------------------------------------------
 
@@ -37,7 +38,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.autosummary",
     "sphinx.ext.todo",
-    'sphinx_rtd_theme',
+    "sphinx_rtd_theme",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
