@@ -81,6 +81,7 @@ or a desired number of simulations.
 Provided implementations:
 
     - :py:func:`~online_pomdp_planning.mcts.has_simulated_n_times`
+    - :py:func:`~online_pomdp_planning.mcts.ProgressBar`
 
 
 Leaf selection

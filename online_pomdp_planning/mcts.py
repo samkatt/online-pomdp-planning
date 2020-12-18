@@ -7,6 +7,7 @@ from functools import partial
 from math import log, sqrt
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
+from tqdm import tqdm  # type: ignore
 from typing_extensions import Protocol
 
 from online_pomdp_planning.types import (
@@ -154,6 +155,8 @@ class StopCondition(Protocol):
 def has_simulated_n_times(n: int, info: Info) -> bool:
     """Returns true if number of iterations in ``info`` exceeds ``n``
 
+    Given ``n``, implements :py:class:`StopCondition`
+
     :param n: number to have iterated
     :type n: int
     :param info: run time info (assumed to have entry "iteration" -> int)
@@ -164,6 +167,67 @@ def has_simulated_n_times(n: int, info: Info) -> bool:
     assert n >= 0 and info["iteration"] >= 0
 
     return n <= info["iteration"]
+
+
+class ProgressBar(StopCondition):
+    """A :py:class:`StopCondition` call that prints out a progress bar
+
+    Note: Always returns ``False``, and meant to be used in combination with
+    other stop condition
+
+    The progress bar is printed by ``tqdm``, and will magnificently fail if
+    something else is printed or logged during.
+
+    XXX: not tested because UI is hard to test, please modify with care
+
+    .. automethod:: __call__
+    """
+
+    def __init__(self, max_sims: int):
+        """Sets up a progress bar for up to ``max_sims`` simulations
+
+        We assume that ``max_sims`` will be _exactly_ the number
+        of samples to be accepted (i.e. calls to ``__call__``). Any less will
+        not close the progress bar, any more and the progress bar will reset.
+
+        :param max_sims: 'length' of progress bar
+        :type max_sims: int
+        """
+        assert max_sims >= 0
+
+        super().__init__()
+        self._max_sims = max_sims
+
+        # ``tqdm`` starts the progress bar upon initiation. At this point the
+        # belief update is not happening yet, so we do not want to print it
+        self.pbar: Optional[tqdm] = None  # pylint: disable=unsubscriptable-object
+
+    def __call__(self, info: Info) -> bool:
+        """Updates the progression bar
+
+        Initiates the bar when ``info["iteration"]`` is 0, closes when
+        ``self._max_sims`` is reached
+
+        :param info: run time information (assumed to map "iteration" -> int)
+        :type info: Info
+        :return: _always_ ``False``
+        :rtype: bool
+        """
+        current_sim = info["iteration"]
+        assert current_sim >= 0
+
+        if current_sim == 0:
+            # the first sample is accepted, LGTM
+            self.pbar = tqdm(total=self._max_sims)
+
+        assert self.pbar
+        self.pbar.update()
+
+        if current_sim >= self._max_sims - 1:
+            # last sample accepted!
+            self.pbar.close()
+
+        return False
 
 
 class LeafSelection(Protocol):
@@ -685,6 +749,7 @@ def create_POUCT(
     ucb_constant: float = 1,
     rollout_depth: int = 100,
     discount_factor: float = 0.95,
+    progress_bar: bool = False,
 ) -> Planner:
     """Creates PO-UCT given the available actions and a simulator
 
@@ -707,6 +772,8 @@ def create_POUCT(
     :type rollout_depth: Optional[int]
     :param discount_factor: the discount factor of the environment, defaults to 0.95
     :type discount_factor: Optional[float]
+    :param progress_bar: flag to output a progress bar, defaults to False
+    :type progress_bar: bool
     :return: MCTS with planner signature (given num sims)
     :rtype: Planner
     """
@@ -719,6 +786,13 @@ def create_POUCT(
     if not init_stats:
         init_stats = {"qval": 0, "n": 0}
 
+    # stop condition
+    pbar = ProgressBar(num_sims) if progress_bar else lambda _: False
+    real_stop_cond = partial(has_simulated_n_times, num_sims)
+
+    def stop_condition(info: Info) -> bool:
+        return real_stop_cond(info) or pbar(info)  # type: ignore
+
     tree_constructor = partial(
         create_root_node_with_child_for_all_actions, actions, init_stats
     )
@@ -730,7 +804,7 @@ def create_POUCT(
 
     return partial(
         mcts,
-        partial(has_simulated_n_times, num_sims),
+        stop_condition,
         tree_constructor,
         leaf_select,
         expansion,
