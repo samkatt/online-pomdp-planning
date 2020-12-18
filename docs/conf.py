@@ -20,10 +20,9 @@
 import os
 import sys
 
-import online_pomdp_planning
-
 sys.path.insert(0, os.path.abspath(".."))
 
+import online_pomdp_planning  # isort:skip
 
 # -- General configuration ---------------------------------------------
 
