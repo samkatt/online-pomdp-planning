@@ -83,7 +83,5 @@ class Planner(Protocol):
         belief and returns an action
 
         :param belief:
-        :type belief: Belief
         :return: the chosen action and run-time information
-        :rtype: Tuple[Action, Info]
         """

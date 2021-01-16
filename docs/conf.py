@@ -38,6 +38,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.todo",
     "sphinx_rtd_theme",
+    "sphinx_autodoc_typehints",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -174,6 +175,8 @@ texinfo_documents = [
         "Miscellaneous",
     ),
 ]
+
+autoclass_content = 'both'
 
 # dev options
 todo_emit_warnings = True

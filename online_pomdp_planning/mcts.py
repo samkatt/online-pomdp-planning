@@ -36,9 +36,7 @@ class ActionNode:
         """Initializes the action node with given statistics
 
         :param initial_statistics: anything you would like to store
-        :type initial_statistics: Any
         :param parent: the parent node in the tree
-        :type parent: ObservationNode
         """
         self.parent = parent
         self.observation_nodes: Dict[Observation, ObservationNode] = {}
@@ -54,9 +52,7 @@ class ActionNode:
             - `observation` is not already associated with a child node
 
         :param observation: the observation associated with child
-        :type observation: Observation
         :param observation_node: the new child node
-        :type observation_node: ObservationNode
         """
         assert observation not in self.observation_nodes
         assert observation_node.parent == self
@@ -68,9 +64,7 @@ class ActionNode:
         Raises `KeyError` if `action` is not associated with a child node
 
         :param observation:
-        :type observation: Observation
         :return: child node
-        :rtype: ObservationNode
         """
         return self.observation_nodes[observation]
 
@@ -87,7 +81,6 @@ class ObservationNode:
         """Initiates an observation node with given parent
 
         :param parent: if no parent is given, this must be the root node
-        :type parent: Optional[ActionNode]
         """
         self.parent = parent
         self.action_nodes: Dict[Action, ActionNode] = {}
@@ -97,7 +90,6 @@ class ObservationNode:
         """Returns a mapping from actions to statistics (shortcut)
 
         :return: action -> stats mapping
-        :rtype: Dict[Action, Any]
         """
         return {a: n.stats for a, n in self.action_nodes.items()}
 
@@ -110,9 +102,7 @@ class ObservationNode:
 
 
         :param action: action associated with new child
-        :type action: Action
         :param node: child node
-        :type node: ActionNode
         """
         assert action not in self.action_nodes
         assert node.parent == self
@@ -124,9 +114,7 @@ class ObservationNode:
         Raises `KeyError` if `action` is not associated with a child node
 
         :param action:
-        :type action: Action
         :return: returns child node
-        :rtype: ActionNode
         """
         return self.action_nodes[action]
 
@@ -146,9 +134,7 @@ class StopCondition(Protocol):
         Determines, given info, whether to stop or not
 
         :param info: run time information
-        :type info: Info
         :return: ``True`` if determined stop condition is met
-        :rtype: bool
         """
 
 
@@ -158,11 +144,8 @@ def has_simulated_n_times(n: int, info: Info) -> bool:
     Given ``n``, implements :py:class:`StopCondition`
 
     :param n: number to have iterated
-    :type n: int
     :param info: run time info (assumed to have entry "iteration" -> int)
-    :type info: Info
     :return: true if number of iterations exceed ``n``
-    :rtype: bool
     """
     assert n >= 0 and info["iteration"] >= 0
 
@@ -191,7 +174,6 @@ class ProgressBar(StopCondition):
         not close the progress bar, any more and the progress bar will reset.
 
         :param max_sims: 'length' of progress bar
-        :type max_sims: int
         """
         assert max_sims >= 0
 
@@ -209,9 +191,7 @@ class ProgressBar(StopCondition):
         ``self._max_sims`` is reached
 
         :param info: run time information (assumed to map "iteration" -> int)
-        :type info: Info
         :return: _always_ ``False``
-        :rtype: bool
         """
         current_sim = info["iteration"]
         assert current_sim >= 0
@@ -241,13 +221,9 @@ class LeafSelection(Protocol):
     ) -> Tuple[ActionNode, State, Observation, bool, Any]:
         """Traverses through the tree and picks a leaf
 
-        :type s: State
         :param node: (root) node
-        :type node: ObservationNode
         :param info: run time information
-        :type info: Info
         :return: leaf node, state and obs, terminal flag and input to :py:class:`BackPropagation`
-        :rtype: Tuple[ActionNode, State, Observation, bool, Any]
         """
 
 
@@ -256,15 +232,10 @@ def ucb(q: float, n: int, n_total: int, ucb_constant: float) -> float:
     Returns the upper confidence bound of Q given statistics
 
     :param q: the q-value
-    :type q: float
     :param n: the number of times this action has been chosen
-    :type n: int
     :param n_total: the total number of times any action has been chosen
-    :type n_total: int
     :param ucb_constant: the exploration constant
-    :type ucb_constant: float
     :return: q + ucb_constant * sqrt(log(n_total) / n)
-    :rtype: float
     """
     assert n >= 0 and n_total >= 0 and ucb_constant >= 0
     if n == 0:
@@ -279,11 +250,8 @@ def select_with_ucb(stats: Dict[Action, Any], ucb_constant: float) -> Action:
     Assumes `stats` contains entries for "n" and "qval"
 
     :param stats: the statistics: Action -> Dict where Dict is {"qval": float, "n": int}
-    :type stats: Dict[Action, Any]
     :param ucb_constant: the exploration constant used in UCB
-    :type ucb_constant: float
     :return: the action with the highest upper confidence bound
-    :rtype: Action
     """
     total_visits = sum(s["n"] for s in stats.values())  # type: ignore
     actions_to_ucb = {
@@ -309,17 +277,11 @@ def ucb_select_leaf(
     (either action node or observation node) as input
 
     :param sim: a POMDP simulator
-    :type sim: Simulator
     :param ucb_constant: exploration constant of UCB
-    :type ucb_constant: float
     :param state: the root state
-    :type state: State
     :param node: the root node
-    :type node: ObservationNode
     :param info: run time information (ignored)
-    :type info: Info
     :return: leaf node, state, observation, terminal flag and list of rewards
-    :rtype: Tuple[ActionNode, State, Observation, List[float]]
     """
     list_of_rewards: List[float] = []
 
@@ -352,13 +314,9 @@ class Expansion(Protocol):
         """Expands a leaf node
 
         :param o: observation that resulted in leaf
-        :type o: Observation
         :param a: action that resulted in leaf
-        :type a: ActionNode
         :param info: run time information
-        :type info: Info
         :return: nothing, modifies the tree
-        :rtype: None
         """
 
 
@@ -378,17 +336,11 @@ def expand_node_with_all_actions(
     :py:class:`Expansion`
 
     :param actions: the available actions
-    :type actions: Action
     :param init_stats: the initial statistics for each node
-    :type init_stats: Any
     :param o: the new observation
-    :type o: Observation
     :param action_node: the current leaf node
-    :type action_node: ActionNode
     :param info: run time information (ignored)
-    :type info: Info
     :return: modifies tree
-    :rtype: None
     """
     expansion = ObservationNode(parent=action_node)
 
@@ -408,15 +360,10 @@ class Evaluation(Protocol):
         """Evaluates a leaf node
 
         :param s: state to evaluate
-        :type s: State
         :param o: observation to evaluate
-        :type o: Observation
         :param t: whether the episode terminated
-        :type t: bool
         :param info: run time information
-        :type info: Info
         :return: evaluation, can be whatever, given to :py:class:`BackPropagation`
-        :rtype: Any
         """
 
 
@@ -427,11 +374,8 @@ class Policy(Protocol):
         """A (stochastic) mapping from state and/or observation to action
 
         :param s: the current state
-        :type s: State
         :param o: the current observation
-        :type o: Observation
         :return: an action
-        :rtype: Action
         """
 
 
@@ -441,13 +385,9 @@ def random_policy(actions: Sequence[Action], _: State, __: Observation) -> Actio
     Implements :py:class:`Policy` given `actions`
 
     :param actions: list of actions to pick randomly from
-    :type actions: Sequence[Action]
     :param _: ignored (state)
-    :type _: State
     :param __: ignored (observation)
-    :type __: Observation
     :return: a random action
-    :rtype: Action
     """
     return random.choice(actions)
 
@@ -473,23 +413,14 @@ def rollout(
     implements :py:class`Evaluation`
 
     :param policy:
-    :type policy: Policy
     :param sim: a POMDP simulator
-    :type sim: Simulator
     :param depth: the longest number of actions to take
-    :type depth: int
     :param discount_factor: discount factor of the problem
-    :type discount_factor: float
     :param s: starting state
-    :type s: State
     :param o: starting observation
-    :type o: Observation
     :param t: whether the episode has terminated
-    :type t: bool
     :param info: run time information (ignored)
-    :type info: Info
     :return: the discounted return of following `policy` in `sim`
-    :rtype: float
     """
     assert 0 <= discount_factor <= 1
     assert depth >= 0, "prevent never ending loop"
@@ -529,15 +460,10 @@ class BackPropagation(Protocol):
         """Updates the nodes visited during selection
 
         :param n: The leaf node that was expanded
-        :type n: ActionNode
         :param leaf_selection_output: The output of the selection method
-        :type leaf_selection_output: Any
         :param leaf_eval_output: The output of the evaluation method
-        :type leaf_eval_output: Any
         :param info: run time information
-        :type info: Info
         :return: has only side effects
-        :rtype: None
         """
 
 
@@ -561,17 +487,11 @@ def backprop_running_q(
     estimate (float) from :py:class:`Evaluation`.
 
     :param discount_factor: 'gamma' of the POMDP environment [0, 1]
-    :type discount_factor: float
     :param leaf: leaf node
-    :type leaf: ActionNode
     :param leaf_selection_output: list of rewards from tree policy
-    :type leaf_selection_output: List[float]
     :param leaf_evaluation: return estimate
-    :type leaf_evaluation: float
     :param info: run time information (ignored)
-    :type info: Info
     :return: has only side effects
-    :rtype: None
     """
     assert 0 <= discount_factor <= 1
 
@@ -611,11 +531,8 @@ class ActionSelection(Protocol):
 
 
         :param stats: statistics of the (root) node
-        :type stats: Dict[Action, Any]
         :param info: run time information
-        :type info: Info
         :return: preferred action
-        :rtype: Action
         """
 
 
@@ -630,11 +547,8 @@ def max_q_action_selector(stats: Dict[Action, Any], info: Info) -> Action:
     list (by q-value) of action-stats pairs
 
     :param stats: assumes a "q" property in the statistic
-    :type stats: Dict[Action, Any]
     :param info: run time information (adds "max_q_action_selector-values")
-    :type info: Info
     :return: action with highest q value
-    :rtype: Action
     """
     info["max_q_action_selector-values"] = sorted(
         stats.items(), key=lambda item: item[1]["qval"], reverse=True
@@ -652,7 +566,6 @@ class TreeConstructor(Protocol):
         """Creates a root node out of nothing
 
         :return: The root node
-        :rtype: ObservationNode
         """
 
 
@@ -663,11 +576,8 @@ def create_root_node_with_child_for_all_actions(
     """Creates a tree by initiating the first action nodes
 
     :param actions: the actions to initiate nodes for
-    :type actions: Iterator[Action]
     :param init_stats: the initial statistics of those nodes
-    :type init_stats: Any
     :return: the root of the tree
-    :rtype: ObservationNode
     """
     root = ObservationNode()
 
@@ -709,23 +619,14 @@ def mcts(
     returned, and thus can be used for reporting and debugging like.
 
     :param stop_cond: the function that returns whether simulating should stop
-    :type stop_cond: StopCondition
     :param tree_constructor: constructor the tree
-    :type tree_constructor: TreeConstructor
     :param leaf_select: the method for selecting leaf nodes
-    :type leaf_select: LeafSelection
     :param expand: the leaf expansion method
-    :type expand: Expansion
     :param evaluate: the leaf evaluation method
-    :type evaluate: Evaluation
     :param backprop: the method for updating the statistics in the visited nodes
-    :type backprop: BackPropagation
     :param action_select: the method for picking an action given root node
-    :type action_select: ActionSelection
     :param belief: the current belief (over the state) at the root node
-    :type belief: Belief
     :return: the preferred action and run time information (e.g. # simulations)
-    :rtype: Tuple[Action, Info]
     """
 
     info: Info = {"iteration": 0}
@@ -769,25 +670,15 @@ def create_POUCT(
     filled in.
 
     :param actions: all the actions available to the agent
-    :type actions: Sequence[Action]
     :param sim: a simulator of the environment
-    :type sim: Simulator
     :param num_sims: number of simulations to run
-    :type num_sims: int
     :param init_stats: how to initialize node statistics, defaults to None which sets Q and n to 0
-    :type init_stats: Any
     :param policy: the rollout policy, defaults to None, which sets a random policy
-    :type policy: Optional[Policy]
     :param ucb_constant: exploration constant used in UCB, defaults to 1
-    :type ucb_constant: Optional[float]
     :param rollout_depth: the depth a rollout will go up to, defaults to 100
-    :type rollout_depth: Optional[int]
     :param discount_factor: the discount factor of the environment, defaults to 0.95
-    :type discount_factor: Optional[float]
     :param progress_bar: flag to output a progress bar, defaults to False
-    :type progress_bar: bool
     :return: MCTS with planner signature (given num sims)
-    :rtype: Planner
     """
 
     assert num_sims > 0
