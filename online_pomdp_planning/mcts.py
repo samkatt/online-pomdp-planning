@@ -19,6 +19,7 @@ from online_pomdp_planning.types import (
     Simulator,
     State,
 )
+from online_pomdp_planning.utils import MovingStatistic
 
 
 class ActionNode:
@@ -276,6 +277,8 @@ def ucb_select_leaf(
     Note: has the potential to be more general and accept any selection method
     (either action node or observation node) as input
 
+    Tracks the tree depth, maintains a running statistic on it in `info`
+
     :param sim: a POMDP simulator
     :param ucb_constant: exploration constant of UCB
     :param state: the root state
@@ -285,12 +288,14 @@ def ucb_select_leaf(
     """
     list_of_rewards: List[float] = []
 
+    depth = 0
     while True:
 
         action = select_with_ucb(node.child_stats, ucb_constant)
         state, obs, reward, terminal_flag = sim(state, action)
 
         list_of_rewards.append(reward)
+        depth += 1
 
         if terminal_flag:
             break
@@ -300,6 +305,17 @@ def ucb_select_leaf(
         except KeyError:
             # action node is a leaf
             break
+
+    # info tracking
+    if terminal_flag:
+        info["ucb_num_terminal_sims"] = info.get("ucb_num_terminal_sims", 0) + 1
+
+    try:
+        depth_stat = info["ucb_tree_depth"]
+    except KeyError:
+        depth_stat = info["ucb_tree_depth"] = MovingStatistic()
+    finally:
+        depth_stat.add(depth)
 
     return node.action_node(action), state, obs, terminal_flag, list_of_rewards
 
@@ -342,6 +358,12 @@ def expand_node_with_all_actions(
     :param info: run time information (ignored)
     :return: modifies tree
     """
+
+    if len(action_node.observation_nodes) == 0:
+        # first time this action node was expanded,
+        # so now we count it as part of the tree
+        info["mcts_num_action_nodes"] = info.get("mcts_num_action_nodes", 0) + 1
+
     expansion = ObservationNode(parent=action_node)
 
     for a in actions:
@@ -444,7 +466,9 @@ def rollout(
     return ret
 
 
-def create_rollout(pol: Policy, sim: Simulator, rollout_depth: int, discount_factor: float) -> Evaluation:
+def create_rollout(
+    pol: Policy, sim: Simulator, rollout_depth: int, discount_factor: float
+) -> Evaluation:
     """Creates a rollout :class:`Evaluation` from ``pol`` and configurations
 
     A fancy partial on :func:`rollout`

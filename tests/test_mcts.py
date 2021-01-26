@@ -4,7 +4,7 @@
 from functools import partial
 from math import log, sqrt
 
-import pytest  # type: ignore
+import pytest
 
 from online_pomdp_planning.mcts import (
     ActionNode,
@@ -181,10 +181,12 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     stats = 0
     node = ActionNode(stats, parent)
 
-    expand_node_with_all_actions(actions, init_stats, o, node, {})
+    info = {}
+    expand_node_with_all_actions(actions, init_stats, o, node, info)
 
     expansion = node.observation_node(o)
 
+    assert info["mcts_num_action_nodes"] == 1
     assert expansion.parent is node
     assert node.observation_node(o) is expansion
     assert len(expansion.action_nodes) == len(actions)
