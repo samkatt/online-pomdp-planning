@@ -658,7 +658,7 @@ def create_POUCT(
     sim: Simulator,
     num_sims: int,
     init_stats: Any = None,
-    policy: Optional[Policy] = None,  # pylint: disable=E1136
+    leaf_eval: Optional[Evaluation] = None,  # pylint: disable=E1136
     ucb_constant: float = 1,
     rollout_depth: int = 100,
     discount_factor: float = 0.95,
@@ -673,7 +673,7 @@ def create_POUCT(
     :param sim: a simulator of the environment
     :param num_sims: number of simulations to run
     :param init_stats: how to initialize node statistics, defaults to None which sets Q and n to 0
-    :param policy: the rollout policy, defaults to None, which sets a random policy
+    :param leaf_eval: the evaluation of leaves, defaults to `None`, which assumes a random rollout
     :param ucb_constant: exploration constant used in UCB, defaults to 1
     :param rollout_depth: the depth a rollout will go up to, defaults to 100
     :param discount_factor: the discount factor of the environment, defaults to 0.95
@@ -684,8 +684,8 @@ def create_POUCT(
     assert num_sims > 0
 
     # defaults
-    if not policy:
-        policy = partial(random_policy, actions)
+    if not leaf_eval:
+        leaf_eval = partial(random_policy, actions)
     if not init_stats:
         init_stats = {"qval": 0, "n": 0}
 
@@ -701,7 +701,7 @@ def create_POUCT(
     )
     leaf_select = partial(ucb_select_leaf, sim, ucb_constant)
     expansion = partial(expand_node_with_all_actions, actions, init_stats)
-    evaluation = partial(rollout, policy, sim, rollout_depth, discount_factor)
+    evaluation = partial(rollout, leaf_eval, sim, rollout_depth, discount_factor)
     backprop = partial(backprop_running_q, discount_factor)
     action_select = max_q_action_selector
 
