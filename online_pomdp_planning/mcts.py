@@ -254,13 +254,15 @@ def select_with_ucb(stats: Dict[Action, Any], ucb_constant: float) -> Action:
     :param ucb_constant: the exploration constant used in UCB
     :return: the action with the highest upper confidence bound
     """
-    total_visits = sum(s["n"] for s in stats.values())  # type: ignore
+    total_visits = sum(s["n"] for s in stats.values())
     actions_to_ucb = {
-        a: ucb(s["qval"], s["n"], total_visits, ucb_constant)  # type: ignore
-        for a, s in stats.items()
+        a: ucb(s["qval"], s["n"], total_visits, ucb_constant) for a, s in stats.items()
     }
 
-    return max(actions_to_ucb, key=actions_to_ucb.get)  # type: ignore
+    max_ucb = max(actions_to_ucb.values())
+    candidate_actions = [a for a, ucb, in actions_to_ucb.items() if ucb >= max_ucb]
+
+    return random.choice(candidate_actions)
 
 
 def ucb_select_leaf(

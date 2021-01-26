@@ -16,6 +16,7 @@ from online_pomdp_planning.utils import MovingStatistic
     ],
 )
 def test_moving_statistic(vals, mean, minimum, maximum):
+    """Tests :class:`online_pomdp_planning.utils.MovingStatistic`"""
     s = MovingStatistic()
 
     for v in vals:

@@ -254,6 +254,20 @@ def test_select_with_ucb(expected_action, u, stats):
     assert select_with_ucb(stats, u) == expected_action
 
 
+def test_select_with_ucb_is_random():
+    """Tests :py:func:`~online_pomdp_planning.mcts.select_with_ucb` is random"""
+    # 2 == bla
+    stats = {
+        True: {"qval": 10, "n": 10000},
+        2: {"qval": 9, "n": 1},
+        "bla": {"qval": 9, "n": 1},
+    }
+
+    chosen_actions = {select_with_ucb(stats, ucb_constant=10) for _ in range(20)}
+
+    assert len(chosen_actions) == 2
+
+
 def construct_ucb_tree(observation_from_simulator) -> ObservationNode:
     """Constructs a particular tree for UCB
 
