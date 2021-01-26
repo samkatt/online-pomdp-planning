@@ -306,10 +306,12 @@ def ucb_select_leaf(
             # action node is a leaf
             break
 
-    # info tracking
+    # info tracking number of terminal simulations
+    info.setdefault("ucb_num_terminal_sims", 0)
     if terminal_flag:
-        info["ucb_num_terminal_sims"] = info.get("ucb_num_terminal_sims", 0) + 1
+        info["ucb_num_terminal_sims"] += 1
 
+    # info tracking tree depth
     try:
         depth_stat = info["ucb_tree_depth"]
     except KeyError:

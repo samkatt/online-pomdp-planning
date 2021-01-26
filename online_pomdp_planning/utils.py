@@ -10,8 +10,8 @@ class MovingStatistic:
     def __init__(self):
         self.mean = 0.0
         self.num = 0
-        self.max = float('-inf')
-        self.min = float('+inf')
+        self.max = float("-inf")
+        self.min = float("+inf")
 
     def add(self, val: float):
         """Add a value to sequence that statistics are being maintained for
