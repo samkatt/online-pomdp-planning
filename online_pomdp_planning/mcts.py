@@ -444,6 +444,20 @@ def rollout(
     return ret
 
 
+def create_rollout(pol: Policy, sim: Simulator, rollout_depth: int, discount_factor: float) -> Evaluation:
+    """Creates a rollout :class:`Evaluation` from ``pol`` and configurations
+
+    A fancy partial on :func:`rollout`
+
+    :param pol:
+    :param sim:
+    :param rollout_depth:
+    :param discount_factor:
+    :return: :class:`Evaluation` based on rollouts following ``pol``
+    """
+    return partial(rollout, pol, sim, rollout_depth, discount_factor)
+
+
 class BackPropagation(Protocol):
     """The signature for back propagation through nodes
 
@@ -685,7 +699,9 @@ def create_POUCT(
 
     # defaults
     if not leaf_eval:
-        leaf_eval = partial(random_policy, actions)
+        leaf_eval = create_rollout(
+            partial(random_policy, actions), sim, rollout_depth, discount_factor
+        )
     if not init_stats:
         init_stats = {"qval": 0, "n": 0}
 
@@ -701,7 +717,6 @@ def create_POUCT(
     )
     leaf_select = partial(ucb_select_leaf, sim, ucb_constant)
     expansion = partial(expand_node_with_all_actions, actions, init_stats)
-    evaluation = partial(rollout, leaf_eval, sim, rollout_depth, discount_factor)
     backprop = partial(backprop_running_q, discount_factor)
     action_select = max_q_action_selector
 
@@ -711,7 +726,7 @@ def create_POUCT(
         tree_constructor,
         leaf_select,
         expansion,
-        evaluation,
+        leaf_eval,
         backprop,
         action_select,
     )

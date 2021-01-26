@@ -74,5 +74,13 @@ def test_pouct():
     assert action == Tiger.L
     assert info["iteration"] == 16384
 
+    planner = create_POUCT(
+        Tiger.actions(),
+        Tiger.sim,
+        16384,
+        ucb_constant=100,
+        leaf_eval=lambda s, o, t, i: 0,
+    )
+
     action, info = planner(tiger_right_belief)
     assert action == Tiger.R
