@@ -260,7 +260,7 @@ def select_with_ucb(stats: Dict[Action, Any], ucb_constant: float) -> Action:
     }
 
     max_ucb = max(actions_to_ucb.values())
-    candidate_actions = [a for a, ucb, in actions_to_ucb.items() if ucb >= max_ucb]
+    candidate_actions = [a for a, ucb in actions_to_ucb.items() if ucb >= max_ucb]
 
     return random.choice(candidate_actions)
 
