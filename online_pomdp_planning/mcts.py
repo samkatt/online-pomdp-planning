@@ -1,11 +1,11 @@
 """Implementation of Monte-Carlo tree search"""
 from __future__ import annotations
 
-from timeit import default_timer as timer
 import random
 from copy import deepcopy
 from functools import partial
 from math import log, sqrt
+from timeit import default_timer as timer
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from tqdm import tqdm  # type: ignore
