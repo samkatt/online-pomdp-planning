@@ -1,6 +1,7 @@
 """Implementation of Monte-Carlo tree search"""
 from __future__ import annotations
 
+from timeit import default_timer as timer
 import random
 from copy import deepcopy
 from functools import partial
@@ -660,6 +661,8 @@ def mcts(
     in turn can populate them however they would like. Finally this is
     returned, and thus can be used for reporting and debugging like.
 
+    Lastly ``info`` returned will contain "plan_runtime" measurement.
+
     :param stop_cond: the function that returns whether simulating should stop
     :param tree_constructor: constructor the tree
     :param leaf_select: the method for selecting leaf nodes
@@ -674,6 +677,8 @@ def mcts(
     info: Info = {"iteration": 0}
 
     root_node = tree_constructor()
+
+    t = timer()
 
     while not stop_cond(info):
 
@@ -691,6 +696,8 @@ def mcts(
         backprop(leaf, selection_output, evaluation, info)
 
         info["iteration"] += 1
+
+    info["plan_runtime"] = timer() - t
 
     return action_select(root_node.child_stats, info), info
 
