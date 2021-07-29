@@ -1,8 +1,6 @@
-pip==19.2.3
 bump2version==0.5.11
 wheel==0.33.6
 watchdog==0.9.0
-flake8==3.7.8
 mypy==0.790
 tox==3.14.0
 coverage==4.5.4
@@ -14,3 +12,5 @@ pylint==2.6.0
 pytest==4.6.5
 pytest-runner==5.1
 typing_extensions
+pytest==4.6.5
+sphinx_autodoc_typehints==1.12.0

@@ -49,8 +49,11 @@ clean-test: ## remove test and coverage artifacts
 
 lint: ## check style with flake8
 	flake8 online_pomdp_planning tests
+	mypy online_pomdp_planning tests
+	pyright online_pomdp_planning tests
 
 format: ## format code with black
+	isort online_pomdp_planning tests
 	black online_pomdp_planning tests
 
 test: ## run tests quickly with the default Python

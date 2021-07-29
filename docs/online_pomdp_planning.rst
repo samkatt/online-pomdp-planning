@@ -11,6 +11,7 @@ Submodules
    online_pomdp_planning.mcts
    online_pomdp_planning.online_pomdp_planning
    online_pomdp_planning.types
+   online_pomdp_planning.utils
 
 Module contents
 ---------------

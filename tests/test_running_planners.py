@@ -19,7 +19,7 @@ class Tiger:
 
     @staticmethod
     def actions() -> List[Action]:
-        """returns actions in the tiger problem """
+        """returns actions in the tiger problem"""
         return [Tiger.L, Tiger.R, Tiger.H]
 
     @staticmethod
