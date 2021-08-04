@@ -13,6 +13,7 @@ with open("HISTORY.rst") as history_file:
 requirements = [
     "tqdm",
     "typing_extensions",
+    "numpy",
 ]
 
 setup_requirements = [

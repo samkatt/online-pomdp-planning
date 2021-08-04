@@ -98,7 +98,7 @@ A popular choice is upper confidence bound (UCB) [auer_finite-time_2002]_.
 
 Provided implementations:
 
-    - :py:func:`~online_pomdp_planning.mcts.ucb_select_leaf`
+    - :py:func:`~online_pomdp_planning.mcts.select_leaf_by_max_scores`
 
 Leaf expansion
 --------------
@@ -165,6 +165,30 @@ Provided implementations:
 
 A common method is to pick the action with highest associated average return.
 
+Discrete search
+===============
+
+This package provides a slight variant to MCTS discussed so far: deterministic
+search. This approach assumes that the result of each action is deterministic,
+meaning it has one outcome ("observation" or "state"). The resulting algorithm
+is slightly different, and is provided through deterministic variants of the
+previous interfaces (note expansion and evaluation is merged here):
+
+    - :py:class:`~online_pomdp_planning.mcts.DeterministicTreeConstructor`, with implementation(S):
+        - :py:class:`~online_pomdp_planning.mcts.create_muzero_root`
+    - :py:class:`~online_pomdp_planning.mcts.DeterministicLeafSelection`, with implementation(s):
+        - :py:class:`~online_pomdp_planning.mcts.select_deterministc_leaf_by_max_scores`
+            - with scoring method :py:func:`~online_pomdp_planning.mcts.muzero_ucb_scores`
+    - :py:class:`~online_pomdp_planning.mcts.DeterministicNodeExpansion`, with implementation(S):
+        - :py:func:`~online_pomdp_planning.mcts.muzero_expand_node`
+    - :py:func:`~online_pomdp_planning.mcts.DeterministicBackPropagation`, with implementation(s):
+        - :py:func:`~online_pomdp_planning.mcts.deterministic_qval_backpropagation`
+
+Currently the (only) implemented discrete tree search is Muzero
+[schrittwieser2020mastering]_
+(:py:func:`online_pomdp_planning.mcts.create_muzero`), given the correct
+methods to do the initial and recurrent inference.
+
 .. References
 
 .. [browne_survey_2012] Browne, Cameron B., et al. "A survey of monte carlo
@@ -177,3 +201,8 @@ A common method is to pick the action with highest associated average return.
 .. [auer_finite-time_2002] Auer, Peter, Nicolo Cesa-Bianchi, and Paul Fischer.
    "Finite-time analysis of the multiarmed bandit problem." Machine learning
    47.2-3 (2002): 235-256.
+
+.. [schrittwieser2020mastering] Schrittwieser, J., Antonoglou, I., Hubert, T.,
+   Simonyan, K., Sifre, L., Schmitt, S., ... & Silver, D. (2020). Mastering
+   atari, go, chess and shogi by planning with a learned model. Nature,
+   588(7839), 604-609.

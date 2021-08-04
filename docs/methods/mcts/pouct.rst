@@ -9,8 +9,8 @@ implementation where the components are:
     - simply initiates a action node for each action
 - stop condition: :py:func:`~online_pomdp_planning.mcts.has_simulated_n_times`
     - simulate exactly ``n`` times
-- leaf selection :py:func:`~online_pomdp_planning.mcts.ucb_select_leaf`
-    - action generation: upper-confidence bound for action selection
+- leaf selection :py:func:`~online_pomdp_planning.mcts.select_leaf_by_max_scores`
+    - pick nodes according to their upper-confidence score
     - observation generation: simulator for observation generator
 - leaf expansion :py:func:`~online_pomdp_planning.mcts.expand_node_with_all_actions`:
     - expand a new node with references for all provided actions

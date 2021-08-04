@@ -1,34 +1,15 @@
 """Defines some types for ease of reading"""
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Hashable, Tuple
 
 from typing_extensions import Protocol
 
-
-class Action(Protocol):
-    """The abstract type representing actions
-
-    Requires to be hash-able
-
-    """
-
-    def __hash__(self):
-        """Can be hashed"""
-
-
-class Observation(Protocol):
-    """The abstract type representing observations
-
-    Requires to be hash-able
-
-    """
-
-    def __hash__(self):
-        """Can be hashed"""
-
-
-class State(Protocol):
-    """The abstract type representing states"""
+Action = Hashable
+"""The abstract type representing actions requires to be hash-able"""
+Observation = Hashable
+"""The abstract type representing observations requires to be hash-able"""
+State = Any
+"""The abstract type for a state, no particular protocol is expected"""
 
 
 class Simulator(Protocol):
@@ -66,7 +47,6 @@ class Belief(Protocol):
         """Required implementation of belief: the ability to sample states"""
 
 
-#: blablabla
 Info = Dict[str, Any]
 """Data type used for information flow from implementation to caller"""
 

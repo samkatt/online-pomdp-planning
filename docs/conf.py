@@ -187,4 +187,8 @@ nitpick_ignore = [
     ("py:class", "SelectionOutput"),
     ("py:class", "EvaluationMetric"),
     ("py:class", "Statistics"),
+    ("py:data", "typing.Any"),
+    ("py:data", "typing.Tuple"),
+    ("py:data", "typing.Optional"),
+    ("py:data", "typing.Callable"),
 ]
