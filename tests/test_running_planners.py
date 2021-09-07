@@ -69,7 +69,7 @@ def tiger_right_belief():
 
 
 def test_pouct():
-    """tests :py:func:`~online_pomdp_planning.mcts.create_POUCT` on Tiger"""
+    """tests :func:`~online_pomdp_planning.mcts.create_POUCT` on Tiger"""
 
     planner = create_POUCT(Tiger.actions(), Tiger.sim, 2 * 16384, ucb_constant=100)
 
@@ -95,7 +95,7 @@ def test_pouct():
 
 
 def test_muzero():
-    """tests :py:func:`create_muzero`"""
+    """tests :func:`create_muzero`"""
 
     num_sims = 128
     c1, c2 = 0.75, 20

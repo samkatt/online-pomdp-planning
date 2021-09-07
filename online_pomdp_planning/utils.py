@@ -34,13 +34,13 @@ class MovingStatistic:
 
 
 def normalize_float(v: float, lower_bound: float, upper_bound: float) -> float:
-    """Normalizes `v` between `lower_bound` and `upper_bound`
+    """Normalizes ``v`` between ``lower_bound`` and ``upper_bound``
 
     Assumes (and will not check) that `lower_bound <= v <= upper_bound`
 
     :param v: the value to be normalized
     :param lower_bound: the supposedly lowest possible value
     :param upper_bound: the supposedly highest possible value
-    :return: normalized `value` (between 0 and 1)
+    :return: normalized ``value`` (between 0 and 1)
     """
     return (v - lower_bound) / (upper_bound - lower_bound)

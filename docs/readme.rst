@@ -34,9 +34,9 @@ This library implements a set of these methods:
 .. provided in this package
 
 Concretely, this package provides factory functions to construct
-:py:class:`~online_pomdp_planning.types.Planner`. A planner is a function that
-is called with a :py:class:`~online_pomdp_planning.types.Belief`, and returns a
-:py:class:`~online_pomdp_planning.types.Action`.
+:class:`~online_pomdp_planning.types.Planner`. A planner is a function that
+is called with a :class:`~online_pomdp_planning.types.Belief`, and returns a
+:class:`~online_pomdp_planning.types.Action`.
 
 .. automethod:: online_pomdp_planning.types.Planner.__call__
    :noindex:
@@ -59,14 +59,14 @@ have no actual meaning, in particular:
 .. meaningless types: `Action`, `Observation` & `State`
 
 Are domain specific and unimportant. All that is required is that the
-:py:class:`~online_pomdp_planning.types.Action` and
-:py:class:`~online_pomdp_planning.types.Observation` are `hashable`. The
-:py:class:`~online_pomdp_planning.types.State` is not used by the library code
+:class:`~online_pomdp_planning.types.Action` and
+:class:`~online_pomdp_planning.types.Observation` are `hashable`. The
+:class:`~online_pomdp_planning.types.State` is not used by the library code
 whatsoever.
 
 .. `Belief` type
 
-A notable exception is the :py:class:`~online_pomdp_planning.types.Belief`,
+A notable exception is the :class:`~online_pomdp_planning.types.Belief`,
 which is assumed to a callable that produces states. This represent that we
 assume the belief is a way of sampling states.
 

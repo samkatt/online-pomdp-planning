@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""tests for `online_pomdp_planning.mcts` module."""
+"""tests for :mod:`online_pomdp_planning.mcts`"""
 
 from functools import partial
 from math import log, sqrt
@@ -123,7 +123,7 @@ def test_observation_child_stats():
 
 
 def test_deterministic_node():
-    """Tests :py:class:`DeterministicNode`"""
+    """Tests :class:`DeterministicNode`"""
 
     root = DeterministicNode({"stat1": 1, "stat2": "bla"}, None)
 
@@ -152,12 +152,12 @@ def test_deterministic_node():
     "n,it,expectation", [(5, 4, False), (5, 5, True), (5, 6, True), (0, 0, True)]
 )
 def test_has_simulated_n_times(n, it, expectation):
-    """Tests :py:func:`online_pomdp_planning.mcts.has_simulated_n_times`"""
+    """Tests :func:`online_pomdp_planning.mcts.has_simulated_n_times`"""
     assert has_simulated_n_times(n, {"iteration": it}) == expectation
 
 
 def test_has_simulated_n_times_asserts():
-    """Tests :py:func:`online_pomdp_planning.mcts.has_simulated_n_times` assertions"""
+    """Tests :func:`online_pomdp_planning.mcts.has_simulated_n_times` assertions"""
 
     with pytest.raises(AssertionError):
         has_simulated_n_times(-1, {"iteration": 0})
@@ -177,7 +177,7 @@ def test_has_simulated_n_times_asserts():
     ],
 )
 def test_create_root_node_with_child_for_all_actions(actions, init_stats):
-    """Tests :py:func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`"""
+    """Tests :func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`"""
     node = create_root_node_with_child_for_all_actions(actions, init_stats)
 
     for a in actions:
@@ -187,7 +187,7 @@ def test_create_root_node_with_child_for_all_actions(actions, init_stats):
 
 
 def test_create_muzero_root():
-    """tests :py:func:`create_muzero_root`"""
+    """tests :func:`create_muzero_root`"""
     latent_state = "latent_state"
     reward = 1.2
     prior: Dict[Action, float] = {"a1": 0.2, "a3": 0.5, "a5": 0.3}
@@ -241,7 +241,7 @@ def test_create_muzero_root():
     ],
 )
 def test_max_q_action_selector(stats, max_a):
-    """tests :py:func:~online_pomdp_planning.mcts.max_q_action_selector"""
+    """tests :func:~online_pomdp_planning.mcts.max_q_action_selector"""
     info = {}
     assert max_q_action_selector(stats, info) == max_a
 
@@ -267,7 +267,7 @@ def test_max_q_action_selector(stats, max_a):
     ],
 )
 def test_max_visits_action_selector(stats, max_a):
-    """tests :py:func:`max_visits_action_selector`"""
+    """tests :func:`max_visits_action_selector`"""
 
     info = {}
     assert max_visits_action_selector(stats, info) == max_a
@@ -294,7 +294,7 @@ def test_max_visits_action_selector(stats, max_a):
     ],
 )
 def test_visit_prob_action_selector(stats, tot, max_a):
-    """tests :py:func:`visit_prob_action_selector`"""
+    """tests :func:`visit_prob_action_selector`"""
 
     info = {}
     assert visit_prob_action_selector(stats, info) == max_a
@@ -322,7 +322,7 @@ def test_visit_prob_action_selector(stats, tot, max_a):
     ],
 )
 def test_expand_node_with_all_actions(o, actions, init_stats):
-    """tests :py:func:~online_pomdp_planning.mcts.expand_node_with_all_actions"""
+    """tests :func:~online_pomdp_planning.mcts.expand_node_with_all_actions"""
     parent = ObservationNode()
     stats = 0
     node = ActionNode(stats, parent)
@@ -404,7 +404,7 @@ def test_muzero_expand_node():
     ],
 )
 def test_ucb_raises(q, n, n_total, ucb_constant, expected_raise):
-    """Tests that :py:func:`~online_pomdp_planning.mcts.ucb` raises on invalid input"""
+    """Tests that :func:`~online_pomdp_planning.mcts.ucb` raises on invalid input"""
     if expected_raise:
         with pytest.raises(AssertionError):
             ucb(q, n, n_total, ucb_constant)
@@ -424,7 +424,7 @@ def test_ucb_raises(q, n, n_total, ucb_constant, expected_raise):
     ],
 )
 def test_ucb(q, n, n_total, ucb_constant, expectation):
-    """Tests :py:func:`~online_pomdp_planning.mcts.ucb`"""
+    """Tests :func:`~online_pomdp_planning.mcts.ucb`"""
     assert ucb(q, n, n_total, ucb_constant) == expectation
 
 
@@ -460,13 +460,13 @@ def test_ucb_scores():
     ],
 )
 def test_select_with_ucb(expected_action, u, stats):
-    """Tests :py:func:`~online_pomdp_planning.mcts.select_with_ucb`"""
+    """Tests :func:`~online_pomdp_planning.mcts.select_with_ucb`"""
     scoring_method = partial(ucb_scores, ucb_constant=u)
     assert select_action(stats, {}, scoring_method) == expected_action
 
 
 def test_select_with_ucb_is_random():
-    """Tests :py:func:`~online_pomdp_planning.mcts.select_with_ucb` is random"""
+    """Tests :func:`~online_pomdp_planning.mcts.select_with_ucb` is random"""
     # 2 == bla
     stats = {
         True: {"qval": 10, "n": 10000},
@@ -484,14 +484,14 @@ def construct_ucb_tree(observation_from_simulator) -> ObservationNode:
     """Constructs a particular tree for UCB
 
     Tree: (action -> stats or obs)
-        - False -> (q=3.4, n=3):
-            - True
-            - (100)
+        - ``False`` -> `(q=3.4, n=3)`:
+            - ``True``
+            - `(100)`
             - 2:
-                - (10, 2) -> (qval: 0, n: 0)
-        - 2 -> (q=3.4, n=3)
+                - `(10, 2)` -> `(qval: 0, n: 0)`
+        - 2 -> `(q=3.4, n=3)`
 
-    According to UCB, the best first action is `False`, the only second action is `(10, 2)`
+    According to UCB, the best first action is ``False``, the only second action is `(10, 2)`
     """
     root = ObservationNode()
 
@@ -549,19 +549,20 @@ def run_ucb_select_leaf_terminal_sim(observation_from_simulator, root):
     """Runs UCB with a terminal simulator from root"""
 
     def term_sim(s, a):
-        """Returns the same as :py:func:`sim` but sets terminal flag to `True`"""
+        """Returns the same as :func:`sim` but sets terminal flag to ``True``"""
         return 0, observation_from_simulator, 0.5, True
 
+    info = {}
     scoring_method = partial(ucb_scores, ucb_constant=1)
     chosen_leaf, s, obs, term, rewards = select_leaf_by_max_scores(
         sim=term_sim,
         scoring_method=scoring_method,
         max_depth=1000,
         node=root,
-        info={},
+        info=info,
         state=1,
     )
-    return chosen_leaf, s, obs, term, rewards
+    return chosen_leaf, s, obs, term, rewards, info
 
 
 def test_select_leaf_by_max_scores():
@@ -584,6 +585,7 @@ def test_select_leaf_by_max_scores():
     assert rewards == [0.5, 0.5], "we did two steps of .5 reward"
     assert info["ucb_tree_depth"].max == 2
     assert info["ucb_num_terminal_sims"] == 0
+    assert info["leaf_depth"] == 2
 
     # test max depth
     for d in [1, 2]:
@@ -591,9 +593,10 @@ def test_select_leaf_by_max_scores():
             observation_from_simulator, root, max_depth=d
         )
         assert info["ucb_tree_depth"].max == d
+        assert info["leaf_depth"] == d
         assert info["ucb_num_terminal_sims"] == 0
 
-    chosen_leaf, s, obs, term, rewards = run_ucb_select_leaf_terminal_sim(
+    chosen_leaf, s, obs, term, rewards, info = run_ucb_select_leaf_terminal_sim(
         observation_from_simulator, root
     )
 
@@ -604,10 +607,11 @@ def test_select_leaf_by_max_scores():
     assert obs == observation_from_simulator, "better output the correct observation"
     assert term, "simulator should indicate it is not terminal"
     assert rewards == [0.5], "we did two steps of .5 reward"
+    assert info["leaf_depth"] == 1
 
 
 def test_select_deterministc_leaf_by_max_scores():
-    """Some tests on :py:func:`select_deterministc_leaf_by_max_scores`"""
+    """Some tests on :func:`select_deterministc_leaf_by_max_scores`"""
     node_scoring_method = partial(ucb_scores, ucb_constant=10)
     info = {}
 
@@ -659,7 +663,7 @@ def test_select_deterministc_leaf_by_max_scores():
 
 
 def test_backprop_running_q_assertion():
-    """Tests that :py:func:`~online_pomdp_planning.mcts.backprop_running_q` raises bad discount"""
+    """Tests that :func:`~online_pomdp_planning.mcts.backprop_running_q` raises bad discount"""
     some_obs_node = ObservationNode()
     with pytest.raises(AssertionError):
         backprop_running_q(-1, ActionNode("gargabe", some_obs_node), [], 0, {})
@@ -677,7 +681,7 @@ def test_backprop_running_q_assertion():
     ],
 )
 def test_backprop_running_q(discount_factor, new_q_first, new_q_leaf):
-    """Tests :py:func:`~online_pomdp_planning.mcts.backprop_running_q`"""
+    """Tests :func:`~online_pomdp_planning.mcts.backprop_running_q`"""
     observation_from_simulator = 2
     root = construct_ucb_tree(observation_from_simulator)
 
@@ -705,7 +709,7 @@ def test_backprop_running_q(discount_factor, new_q_first, new_q_leaf):
 
 
 def test_deterministic_qval_backpropagation():
-    """Tests :py:func:`deterministic_qval_backpropagation"""
+    """Tests :func:`deterministic_qval_backpropagation"""
     q_statistic = MovingStatistic()
     q_statistic.add(5)
     q_statistic.add(-1)
@@ -744,7 +748,7 @@ def test_deterministic_qval_backpropagation():
 
 
 def test_rollout():
-    """Tests :py:func:`~online_pomdp_planning.mcts.rollout`"""
+    """Tests :func:`~online_pomdp_planning.mcts.rollout`"""
 
     pol = partial(random_policy, ([False, 1, (10, 2)]))
     discount_factor = 0.9
@@ -758,7 +762,7 @@ def test_rollout():
         return 0, 2, 0.5, False
 
     def term_sim(s, a):
-        """Returns the same as :py:func:`sim` but sets terminal flag to `True`"""
+        """Returns the same as :func:`sim` but sets terminal flag to ``True``"""
         return 0, 2, 0.5, True
 
     assert (

@@ -1,4 +1,4 @@
-"""Tests `online_pomdp_planning.utils`"""
+"""Tests :mod:`online_pomdp_planning.utils`"""
 
 import pytest
 

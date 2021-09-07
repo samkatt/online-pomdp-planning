@@ -66,7 +66,7 @@ the first set of action nodes, one for each action.
 
 Provided implementations:
 
-    - :py:func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`
+    - :func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`
 
 
 Stop condition
@@ -80,8 +80,8 @@ or a desired number of simulations.
 
 Provided implementations:
 
-    - :py:func:`~online_pomdp_planning.mcts.has_simulated_n_times`
-    - :py:func:`~online_pomdp_planning.mcts.ProgressBar`
+    - :func:`~online_pomdp_planning.mcts.has_simulated_n_times`
+    - :func:`~online_pomdp_planning.mcts.ProgressBar`
 
 
 Leaf selection
@@ -98,7 +98,7 @@ A popular choice is upper confidence bound (UCB) [auer_finite-time_2002]_.
 
 Provided implementations:
 
-    - :py:func:`~online_pomdp_planning.mcts.select_leaf_by_max_scores`
+    - :func:`~online_pomdp_planning.mcts.select_leaf_by_max_scores`
 
 Leaf expansion
 --------------
@@ -112,7 +112,7 @@ most common approach is to add a node that represents the simulated
 
 Provided implementations:
 
-    - :py:func:`~online_pomdp_planning.mcts.expand_node_with_all_actions`
+    - :func:`~online_pomdp_planning.mcts.expand_node_with_all_actions`
       expand a new node with references for all provided actions
 
 Leaf evaluation
@@ -130,7 +130,7 @@ effective implementations can be domain-specific policies or evaluation models
 
 Provided implementations:
 
-    - :py:func:`~online_pomdp_planning.mcts.rollout`
+    - :func:`~online_pomdp_planning.mcts.rollout`
 
 Back propagation
 ----------------
@@ -148,7 +148,7 @@ return.
 
 Provided implementations:
 
-    - :py:func:`~online_pomdp_planning.mcts.backprop_running_q`
+    - :func:`~online_pomdp_planning.mcts.backprop_running_q`
 
 Action selector
 ---------------
@@ -161,7 +161,7 @@ in the root node.
 
 Provided implementations:
 
-    - :py:func:`~online_pomdp_planning.mcts.max_q_action_selector` picks the action with max q value
+    - :func:`~online_pomdp_planning.mcts.max_q_action_selector` picks the action with max q value
 
 A common method is to pick the action with highest associated average return.
 
@@ -174,20 +174,20 @@ meaning it has one outcome ("observation" or "state"). The resulting algorithm
 is slightly different, and is provided through deterministic variants of the
 previous interfaces (note expansion and evaluation is merged here):
 
-    - :py:class:`~online_pomdp_planning.mcts.DeterministicTreeConstructor`, with implementation(S):
-        - :py:class:`~online_pomdp_planning.mcts.create_muzero_root`
-    - :py:class:`~online_pomdp_planning.mcts.DeterministicLeafSelection`, with implementation(s):
-        - :py:class:`~online_pomdp_planning.mcts.select_deterministc_leaf_by_max_scores`
-            - with scoring method :py:func:`~online_pomdp_planning.mcts.muzero_ucb_scores`
-    - :py:class:`~online_pomdp_planning.mcts.DeterministicNodeExpansion`, with implementation(S):
-        - :py:func:`~online_pomdp_planning.mcts.muzero_expand_node`
-    - :py:func:`~online_pomdp_planning.mcts.DeterministicBackPropagation`, with implementation(s):
-        - :py:func:`~online_pomdp_planning.mcts.deterministic_qval_backpropagation`
+    - :class:`~online_pomdp_planning.mcts.DeterministicTreeConstructor`, with implementation(S):
+        - :class:`~online_pomdp_planning.mcts.create_muzero_root`
+    - :class:`~online_pomdp_planning.mcts.DeterministicLeafSelection`, with implementation(s):
+        - :class:`~online_pomdp_planning.mcts.select_deterministc_leaf_by_max_scores`
+            - with scoring method :func:`~online_pomdp_planning.mcts.muzero_ucb_scores`
+    - :class:`~online_pomdp_planning.mcts.DeterministicNodeExpansion`, with implementation(S):
+        - :func:`~online_pomdp_planning.mcts.muzero_expand_node`
+    - :func:`~online_pomdp_planning.mcts.DeterministicBackPropagation`, with implementation(s):
+        - :func:`~online_pomdp_planning.mcts.deterministic_qval_backpropagation`
 
 Currently the (only) implemented discrete tree search is Muzero
 [schrittwieser2020mastering]_
-(:py:func:`online_pomdp_planning.mcts.create_muzero`), given the correct
-methods to do the initial and recurrent inference.
+(:func:`online_pomdp_planning.mcts.create_muzero`), given the correct methods
+to do the initial and recurrent inference.
 
 .. References
 
