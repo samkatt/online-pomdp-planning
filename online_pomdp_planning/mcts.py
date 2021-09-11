@@ -1278,6 +1278,7 @@ def create_POUCT(
 
     # defaults
     if not leaf_eval:
+        assert rollout_depth > 0
 
         def leaf_eval(s: State, o: Observation, t: bool, info: Info):
             """Evaluates a leaf (:class:`LeafSelection`) through random rollout"""
