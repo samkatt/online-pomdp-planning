@@ -7,8 +7,7 @@ Monte-Carlo tree search
 Monte-Carlo tree search (MCTS [browne_survey_2012]_) in POMDPs incrementally
 builds a look-ahead tree of interactions with the environment. This is done
 through simulations, where each simulation travels through the tree and expands
-when it reaches a leaf. In POMDPs the tree branches on actions and observations
-[silver_monte-carlo_2010]_.
+when it reaches a leaf. In POMDPs the tree branches on actions and observations.
 
 Short description
 =================
@@ -174,12 +173,12 @@ meaning it has one outcome ("observation" or "state"). The resulting algorithm
 is slightly different, and is provided through deterministic variants of the
 previous interfaces (note expansion and evaluation is merged here):
 
-    - :class:`~online_pomdp_planning.mcts.DeterministicTreeConstructor`, with implementation(S):
+    - :class:`~online_pomdp_planning.mcts.DeterministicTreeConstructor`, with implementation(s):
         - :class:`~online_pomdp_planning.mcts.create_muzero_root`
     - :class:`~online_pomdp_planning.mcts.DeterministicLeafSelection`, with implementation(s):
         - :class:`~online_pomdp_planning.mcts.select_deterministc_leaf_by_max_scores`
             - with scoring method :func:`~online_pomdp_planning.mcts.muzero_ucb_scores`
-    - :class:`~online_pomdp_planning.mcts.DeterministicNodeExpansion`, with implementation(S):
+    - :class:`~online_pomdp_planning.mcts.DeterministicNodeExpansion`, with implementation(s):
         - :func:`~online_pomdp_planning.mcts.muzero_expand_node`
     - :func:`~online_pomdp_planning.mcts.DeterministicBackPropagation`, with implementation(s):
         - :func:`~online_pomdp_planning.mcts.deterministic_qval_backpropagation`
@@ -194,9 +193,6 @@ to do the initial and recurrent inference.
 .. [browne_survey_2012] Browne, Cameron B., et al. "A survey of monte carlo
    tree search methods." IEEE Transactions on Computational Intelligence and AI
    in games 4.1 (2012): 1-43.
-
-.. [silver_monte-carlo_2010] Silver, David, and Joel Veness. "Monte-Carlo planning in
-   large POMDPs." Advances in neural information processing systems. 2010.
 
 .. [auer_finite-time_2002] Auer, Peter, Nicolo Cesa-Bianchi, and Paul Fischer.
    "Finite-time analysis of the multiarmed bandit problem." Machine learning

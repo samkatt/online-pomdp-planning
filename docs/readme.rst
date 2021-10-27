@@ -13,10 +13,10 @@ the environment to an action.
 .. online planning
 
 Online planning is the family of methods that assumes access to (a simulator
-of) the dynamics and aims to figure out what action to take *during execution*.
-For this it requires a belief, a probability distribution over the current
-state. The planner takes a current belief of the current state of the
-environment and a simulator, and spits out its favorite action.
+of) the dynamics and infers what action to take *during execution*. For this it
+requires the belief, a probability distribution over the current state. The
+planner takes a current belief of the current state of the environment and a
+simulator, and spits out its favorite action.
 
 .. [kaelbling_planning_1998] Kaelbling, Leslie Pack, Michael L. Littman, and
    Anthony R. Cassandra. “Planning and acting in partially observable
