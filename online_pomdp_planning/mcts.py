@@ -12,12 +12,14 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Mapping,
     NamedTuple,
     Optional,
     Sequence,
     Tuple,
 )
 
+import more_itertools as mitt
 import numpy as np
 from tqdm import tqdm
 from typing_extensions import Protocol
@@ -852,8 +854,7 @@ def backprop_running_q(
         # go up in tree
         n = n.parent.parent
 
-    # make sure we reached the 'root action node'
-    assert n is None
+    assert n is None, "somehow processed all rewards yet not reached root"
 
 
 def deterministic_qval_backpropagation(
@@ -897,6 +898,35 @@ def deterministic_qval_backpropagation(
 
         value *= discount_factor
         n = n.parent
+
+
+def associate_prior_with_nodes(
+    n: ActionNode,
+    leaf_selection_output: Any,
+    leaf_eval_output: Mapping[Action, float],
+    info: Info,
+) -> None:
+    """Store prior in ``leaf_eval_output`` into correct nodes
+
+    Each child of ``n`` will have a ``prior`` stored in their ``stats``
+
+    Implements :class:`BackPropagation`
+
+    TODO: test
+
+    :param n: node that was expanded, it's children get a prior
+    :param leaf_eval_output: ignored
+    :param leaf_eval_output: the action => probability prior
+    :param info: ignored
+    """
+    observation_node = mitt.one(n.observation_nodes.items())[1]
+
+    assert len(observation_node.action_nodes) == len(
+        leaf_eval_output
+    ), "Prior mapping and observation node have different actions"
+
+    for action, node in observation_node.action_nodes.items():
+        node.stats["prior"] = leaf_eval_output[action]
 
 
 class ActionSelection(Protocol):

@@ -148,6 +148,7 @@ return.
 Provided implementations:
 
     - :func:`~online_pomdp_planning.mcts.backprop_running_q`
+    - :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes`
 
 Action selector
 ---------------

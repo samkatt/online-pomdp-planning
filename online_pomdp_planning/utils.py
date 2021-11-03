@@ -25,12 +25,7 @@ class MovingStatistic:
         self.min = min(self.min, val)
 
     def __repr__(self) -> str:
-        return "MovingStatistic(mean=%s, min/max=%s/%s, n=%s)" % (
-            self.mean,
-            self.min,
-            self.max,
-            self.num,
-        )
+        return f"MovingStatistic(mean={self.mean}, min/max={self.min}/{self.max}, n={self.num})"
 
 
 def normalize_float(v: float, lower_bound: float, upper_bound: float) -> float:

@@ -12,6 +12,7 @@ from online_pomdp_planning.mcts import (
     DeterministicNode,
     MuzeroInferenceOutput,
     ObservationNode,
+    associate_prior_with_nodes,
     backprop_running_q,
     create_muzero_root,
     create_root_node_with_child_for_all_actions,
@@ -778,6 +779,53 @@ def test_rollout():
         rollout(pol, sim, 2, discount_factor, state, obs, terminal, {})
         == 0.5 + discount_factor * 0.5
     ), "1 depth should allow 1 action"
+
+
+def test_associate_prior_with_nodes():
+    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes`"""
+    actions = ["a1", "a2", True]
+
+    # construct simple tree
+    root = ObservationNode()
+    an = ActionNode({}, root)
+    on = ObservationNode(an)
+    for a in actions:
+        on.add_action_node(a, ActionNode({}, on))
+
+    an.add_observation_node("obs1", on)
+
+    prior = {"a1": 0.2, "a2": 0.3, True: 0.5}
+    associate_prior_with_nodes(an, None, prior, {})
+
+    for a, p in prior.items():
+        assert on.action_node(a).stats["prior"] == p
+
+
+def test_associate_prior_with_nodes_errors():
+    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes` with wrong input"""
+    actions = ["a1", "a2"]
+
+    # construct simple tree
+    root = ObservationNode()
+    an = ActionNode({}, root)
+    on = ObservationNode(an)
+    for a in actions:
+        on.add_action_node(a, ActionNode({}, on))
+
+    with pytest.raises(ValueError):
+        associate_prior_with_nodes(an, None, {}, {})
+
+    an.add_observation_node("obs1", on)
+
+    with pytest.raises(AssertionError):
+        associate_prior_with_nodes(an, None, {}, {})
+
+    with pytest.raises(AssertionError):
+        too_many_actions = {"new_action": 0.4, **{a: 0.2 for a in actions}}
+        associate_prior_with_nodes(an, None, too_many_actions, {})
+
+    with pytest.raises(KeyError):
+        associate_prior_with_nodes(an, None, {"a1": 0.1, "a3": 0.9}, {})
 
 
 if __name__ == "__main__":
