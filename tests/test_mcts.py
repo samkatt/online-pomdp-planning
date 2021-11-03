@@ -12,12 +12,14 @@ from online_pomdp_planning.mcts import (
     DeterministicNode,
     MuzeroInferenceOutput,
     ObservationNode,
+    associate_prior_with_nodes,
     backprop_running_q,
     create_muzero_root,
     create_root_node_with_child_for_all_actions,
     deterministic_qval_backpropagation,
     expand_node_with_all_actions,
     has_simulated_n_times,
+    initiate_info,
     max_q_action_selector,
     max_visits_action_selector,
     muzero_expand_node,
@@ -32,6 +34,18 @@ from online_pomdp_planning.mcts import (
 )
 from online_pomdp_planning.types import Action
 from online_pomdp_planning.utils import MovingStatistic
+
+
+def test_initiate_info():
+    """Tests :func:`~online_pomdp_planning.mcts.test_initiate_info`"""
+    info = initiate_info()
+
+    assert info["ucb_num_terminal_sims"] == 0
+    assert info["mcts_num_action_nodes"] == 0
+    assert info["iteration"] == 0
+    # little cheat to easily check for equality, please don't do this in your own code
+    assert str(info["ucb_tree_depth"]) == str(MovingStatistic())
+    assert str(info["q_statistic"]) == str(MovingStatistic())
 
 
 def test_action_constructor():
@@ -327,7 +341,7 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     stats = 0
     node = ActionNode(stats, parent)
 
-    info = {}
+    info = {"mcts_num_action_nodes": 0}
     expand_node_with_all_actions(actions, init_stats, o, node, info)
 
     expansion = node.observation_node(o)
@@ -532,7 +546,11 @@ def run_ucb_select_leaf(observation_from_simulator, root, max_depth=1000):
         """Fake simulator, returns state 0, obs 2, reward .5, not terminal, and info"""
         return 0, observation_from_simulator, 0.5, False
 
-    info = {}
+    info = {
+        "leaf_depth": 0,
+        "ucb_tree_depth": MovingStatistic(),
+        "ucb_num_terminal_sims": 0,
+    }
     scoring_method = partial(ucb_scores, ucb_constant=1)
     chosen_leaf, s, obs, term, rewards = select_leaf_by_max_scores(
         sim=sim,
@@ -552,7 +570,11 @@ def run_ucb_select_leaf_terminal_sim(observation_from_simulator, root):
         """Returns the same as :func:`sim` but sets terminal flag to ``True``"""
         return 0, observation_from_simulator, 0.5, True
 
-    info = {}
+    info = {
+        "leaf_depth": 0,
+        "ucb_tree_depth": MovingStatistic(),
+        "ucb_num_terminal_sims": 0,
+    }
     scoring_method = partial(ucb_scores, ucb_constant=1)
     chosen_leaf, s, obs, term, rewards = select_leaf_by_max_scores(
         sim=term_sim,
@@ -613,7 +635,7 @@ def test_select_leaf_by_max_scores():
 def test_select_deterministc_leaf_by_max_scores():
     """Some tests on :func:`select_deterministc_leaf_by_max_scores`"""
     node_scoring_method = partial(ucb_scores, ucb_constant=10)
-    info = {}
+    info = {"ucb_tree_depth": MovingStatistic()}
 
     # if only one leaf, should find it
     root = DeterministicNode(
@@ -778,6 +800,53 @@ def test_rollout():
         rollout(pol, sim, 2, discount_factor, state, obs, terminal, {})
         == 0.5 + discount_factor * 0.5
     ), "1 depth should allow 1 action"
+
+
+def test_associate_prior_with_nodes():
+    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes`"""
+    actions = ["a1", "a2", True]
+
+    # construct simple tree
+    root = ObservationNode()
+    an = ActionNode({}, root)
+    on = ObservationNode(an)
+    for a in actions:
+        on.add_action_node(a, ActionNode({}, on))
+
+    an.add_observation_node("obs1", on)
+
+    prior = {"a1": 0.2, "a2": 0.3, True: 0.5}
+    associate_prior_with_nodes(an, None, prior, {})
+
+    for a, p in prior.items():
+        assert on.action_node(a).stats["prior"] == p
+
+
+def test_associate_prior_with_nodes_errors():
+    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes` with wrong input"""
+    actions = ["a1", "a2"]
+
+    # construct simple tree
+    root = ObservationNode()
+    an = ActionNode({}, root)
+    on = ObservationNode(an)
+    for a in actions:
+        on.add_action_node(a, ActionNode({}, on))
+
+    with pytest.raises(ValueError):
+        associate_prior_with_nodes(an, None, {}, {})
+
+    an.add_observation_node("obs1", on)
+
+    with pytest.raises(AssertionError):
+        associate_prior_with_nodes(an, None, {}, {})
+
+    with pytest.raises(AssertionError):
+        too_many_actions = {"new_action": 0.4, **{a: 0.2 for a in actions}}
+        associate_prior_with_nodes(an, None, too_many_actions, {})
+
+    with pytest.raises(KeyError):
+        associate_prior_with_nodes(an, None, {"a1": 0.1, "a3": 0.9}, {})
 
 
 if __name__ == "__main__":

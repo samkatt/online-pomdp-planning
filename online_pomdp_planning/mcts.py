@@ -12,12 +12,14 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Mapping,
     NamedTuple,
     Optional,
     Sequence,
     Tuple,
 )
 
+import more_itertools as mitt
 import numpy as np
 from tqdm import tqdm
 from typing_extensions import Protocol
@@ -37,6 +39,25 @@ Stats = Dict[str, Any]
 """Alias type for statistics: a mapping from some description to anything"""
 ActionStats = Dict[Action, Stats]
 """Alias type for action statistics: a mapping from actions to :class:`Stats`"""
+
+
+def initiate_info() -> Info:
+    """Simple initiation of info object, populating expected values
+
+    Returns a dictionary with starter values for:
+        - ucb_num_terminal_sims
+        - mcts_num_action_nodes
+        - ucb_tree_depth
+        - q_statistic
+        - iteration
+    """
+    return {
+        "ucb_num_terminal_sims": 0,
+        "mcts_num_action_nodes": 0,
+        "ucb_tree_depth": MovingStatistic(),
+        "q_statistic": MovingStatistic(),
+        "iteration": 0,
+    }
 
 
 class ActionNode:
@@ -362,10 +383,11 @@ def ucb_scores(
     }
 
 
-def muzero_prior_score(p: float, n: int, n_total: int) -> float:
+def prior_term_in_ucb(p: float, n: int, n_total: int) -> float:
     """Computes the node's prior term in muzero's UCB scoring
 
-    The contribution of the node specific prior in :func:`muzero_ucb_scores`::
+    The contribution of the node specific prior in
+    :func:`muzero_ucb_scores`::
 
         p * (sqrt(n_total) / (n + 1))
 
@@ -382,7 +404,7 @@ def muzero_prior_score(p: float, n: int, n_total: int) -> float:
 
 
 def muzero_ucb_scores(
-    stats: ActionStats, info: Info, c1: float, c2: float
+    stats: ActionStats, info: Info, c1: float, c2: Optional[float]
 ) -> Dict[Action, float]:
     """The UCB scoring method used my muzero
 
@@ -394,12 +416,18 @@ def muzero_ucb_scores(
     with `N` being total number of visits and `n` being the number of visits of
     the child node, and `norm(q)` is the normalized q value of the node.
 
-    The second (prior) term is implemented in :func:`muzero_prior_score`.
+    The second (prior & exploration) term is implemented in
+    :func:`prior_term_in_ucb`.
 
     Assumes ``stats`` contains "qval" and "n" for every action and that
     ``info`` contains "q_statistic".
 
-    XXX: *not* tested, no idea how to sensibly do that honestly
+    When ``c2`` is ``None``, this reduces to the scores used by previous
+    algorithms such as Alpha-zero by settings the baseterm to ``c1``.
+
+    Given ``c1`` and ``c2``, implements the :class:`ActionScoringMethod`.
+
+    *Not* tested, no idea how to sensibly do that honestly.
 
     See paper Schrittwieser, Julian, et al. Mastering atari, go, chess and
     shogi by planning with a learned model." Nature 588.7839 (2020): 604-609.".
@@ -407,7 +435,7 @@ def muzero_ucb_scores(
     :param stats: action => stats mapping
     :param info: contains "q_staticstic"
     :param c1: first exploration constant
-    :param c2: second exploration constant
+    :param c2: second exploration constant, if 0 then the last term vanishes
     :return: action => float scores
     """
     q_stat = info["q_statistic"]
@@ -416,7 +444,7 @@ def muzero_ucb_scores(
     total_visits = sum(s["n"] for s in stats.values())
 
     # base term
-    base_term = c1 + log((total_visits + c2 + 1) / c2)
+    base_term = c1 + log((total_visits + c2 + 1) / c2) if c2 else c1
 
     # q: assigning `0` to unvisited actions (not "inf")
     q_values = {a: stat["qval"] if stat["n"] != 0 else 0 for a, stat in stats.items()}
@@ -427,12 +455,46 @@ def muzero_ucb_scores(
 
     # p
     priors = {
-        a: muzero_prior_score(stat["prior"], stat["n"], total_visits)
+        a: prior_term_in_ucb(stat["prior"], stat["n"], total_visits)
         for a, stat in stats.items()
     }
 
     # q     +    prior & expl   *   base term
     return {a: q_values[a] + priors[a] * base_term for a in stats}
+
+
+def ucb_with_prior_scores(
+    stats: ActionStats,
+    info: Info,
+    ucb_constant: float,
+) -> Dict[Action, float]:
+    """The UCB scoring method combined with a prior
+
+    Returns an action => score mapping, where the scores are::
+
+        norm(q) + ucb_constant * prior * (sqrt(N) / 1 + n)
+        q       + prior & exploration
+
+    with `N` being total number of visits and `n` being the number of visits of
+    the child node, and `norm(q)` is the normalized q value of the node.
+
+    The second (prior & exploration) term is implemented in
+    :func:`prior_term_in_ucb`.
+
+    Assumes ``stats`` contains "qval" and "n" for every action and that
+    ``info`` contains "q_statistic".
+
+    Given ``ucb_constant``, implements the :class:`ActionScoringMethod`.
+
+    Implementd by calling :func:`muzero_ucb_scores` with ``c2`` as
+    ``None``.
+
+    :param stats: action => stats mapping
+    :param info: contains "q_staticstic"
+    :param ucb_constant: first exploration constant
+    :return: action => float scores
+    """
+    return muzero_ucb_scores(stats, info, ucb_constant, None)
 
 
 def select_action(
@@ -480,6 +542,11 @@ def select_leaf_by_max_scores(
     (``ucb_tree_depth``), and stops going down the tree when ``max_depth`` is
     reached. Additionally sets ``leaf_depth``
 
+    NOTE::
+
+        Assumes "ucb_num_terminal_sims", "ucb_tree_depth" and "leaf_depth" to
+        be entries in ``info``
+
     :param sim: a POMDP simulator
     :param scoring_method: function that, given action stats, returns their scores
     :param max_depth: max length of the tree to go down
@@ -510,12 +577,10 @@ def select_leaf_by_max_scores(
             break
 
     # info tracking number of terminal simulations
-    info.setdefault("ucb_num_terminal_sims", 0)
     if terminal_flag:
         info["ucb_num_terminal_sims"] += 1
 
     # info tracking tree depth
-    info.setdefault("ucb_tree_depth", MovingStatistic())
     info["ucb_tree_depth"].add(depth)
 
     info["leaf_depth"] = depth
@@ -535,13 +600,14 @@ def select_deterministc_leaf_by_max_scores(
 
     Returns "None" as second argument
 
-    Picks action nodes according to :class:`select_action` (with
-    ``scoring_method`` :func:`muzero_ucb_scores`).
-
-    Assumes "q_statistic" is in ``info``
+    Picks action nodes according to ``scoring_method``.
 
     Tracks the tree depth, maintains a running statistic on it in
     `info["ucb_tree_depth"]`.
+
+    NOTE::
+
+        Assumes "ucb_tree_depth" is an entry in ``info``
 
     :param scoring_method: function that, given action stats, returns their scores
     :param node: the root node
@@ -557,7 +623,6 @@ def select_deterministc_leaf_by_max_scores(
         depth += 1
 
     # info tracking tree depth
-    info.setdefault("ucb_tree_depth", MovingStatistic())
     info["ucb_tree_depth"].add(depth)
 
     return node, None
@@ -612,11 +677,13 @@ def expand_node_with_all_actions(
     NOTE: ``action_node`` must not have a child node associated with ``o`` or
     this will result in an ``AssertionError``
 
+    NOTE: requires ``info`` to contain entry for "mcts_num_action_nodes"
+
     :param actions: the available actions
     :param init_stats: the initial statistics for each node
     :param o: the new observation
     :param action_node: the current leaf node
-    :param info: run time information (ignored)
+    :param info: run time information -- requires "mcts_num_action_nodes"
     :return: modifies tree
     """
     assert o not in action_node.observation_nodes
@@ -624,7 +691,7 @@ def expand_node_with_all_actions(
     if len(action_node.observation_nodes) == 0:
         # first time this action node was expanded,
         # so now we count it as part of the tree
-        info["mcts_num_action_nodes"] = info.get("mcts_num_action_nodes", 0) + 1
+        info["mcts_num_action_nodes"] += 1
 
     expansion = ObservationNode(parent=action_node)
 
@@ -852,8 +919,7 @@ def backprop_running_q(
         # go up in tree
         n = n.parent.parent
 
-    # make sure we reached the 'root action node'
-    assert n is None
+    assert n is None, "somehow processed all rewards yet not reached root"
 
 
 def deterministic_qval_backpropagation(
@@ -897,6 +963,33 @@ def deterministic_qval_backpropagation(
 
         value *= discount_factor
         n = n.parent
+
+
+def associate_prior_with_nodes(
+    n: ActionNode,
+    leaf_selection_output: Any,
+    leaf_eval_output: Mapping[Action, float],
+    info: Info,
+) -> None:
+    """Store prior in ``leaf_eval_output`` into correct nodes
+
+    Each child of ``n`` will have a ``prior`` stored in their ``stats``
+
+    Implements :class:`BackPropagation`
+
+    :param n: node that was expanded, it's children get a prior
+    :param leaf_eval_output: ignored
+    :param leaf_eval_output: the action => probability prior
+    :param info: ignored
+    """
+    observation_node = mitt.one(n.observation_nodes.items())[1]
+
+    assert len(observation_node.action_nodes) == len(
+        leaf_eval_output
+    ), "Prior mapping and observation node have different actions"
+
+    for action, node in observation_node.action_nodes.items():
+        node.stats["prior"] = leaf_eval_output[action]
 
 
 class ActionSelection(Protocol):
@@ -1130,7 +1223,7 @@ def mcts(
     :return: the preferred action and run time information (e.g. # simulations)
     """
 
-    info: Info = {"iteration": 0}
+    info: Info = initiate_info()
 
     root_node = tree_constructor()
 
@@ -1203,7 +1296,7 @@ def deterministic_tree_search(
     :return: the preferred action and run time information (e.g. # simulations)
     """
 
-    info: Info = {"iteration": 0, "q_statistic": MovingStatistic()}
+    info: Info = initiate_info()
 
     root_node = tree_constructor(history_representation)
 
@@ -1355,6 +1448,11 @@ def create_muzero(
     Note that the 'type' of muzero is not well defined in this repository. The
     input is not a :class:`online_pomdp_planning.types.Belief`, but unclear
     what it is.
+
+    NOTE::
+
+        This planner is not tested and ran much, rather a prototype. Use at
+        your own risk
 
     :param initial_inference: the initial mapping and inference over history
     :param recurrent_inference: the recurrent/dynamics/evaluation of tree expansion
