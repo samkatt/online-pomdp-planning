@@ -1089,7 +1089,7 @@ class TreeConstructor(Protocol):
     .. automethod:: __call__
     """
 
-    def __call__(self) -> ObservationNode:
+    def __call__(self, info: Info) -> ObservationNode:
         """Creates a root node out of nothing
 
         :return: The root node
@@ -1102,7 +1102,7 @@ class DeterministicTreeConstructor(Protocol):
     .. automethod:: __call__
     """
 
-    def __call__(self, history_representation: Any) -> DeterministicNode:
+    def __call__(self, history_representation: Any, info: Info) -> DeterministicNode:
         """Creates a root node out of nothing
 
         :return: The root node
@@ -1110,11 +1110,15 @@ class DeterministicTreeConstructor(Protocol):
 
 
 def create_root_node_with_child_for_all_actions(
+    info: Info,
     actions: Iterator[Action],
     init_stats: Any,
 ) -> ObservationNode:
     """Creates a tree by initiating the first action nodes
 
+    Implements :class:`TreeConstructor` given ``actions`` and ``init_stats``
+
+    :param info: ignored
     :param actions: the actions to initiate nodes for
     :param init_stats: the initial statistics of those nodes
     :return: the root of the tree
@@ -1129,6 +1133,7 @@ def create_root_node_with_child_for_all_actions(
 
 def create_muzero_root(
     latent_state: Any,
+    info: Info,
     reward: float,
     prior: Dict[Action, float],
     noise_dirichlet_alpha: float,
@@ -1145,6 +1150,7 @@ def create_muzero_root(
     is the weight given to the noise.
 
     :param latent_state: the current history/observation/state representation for muzero dynamics
+    :param info: ignored
     :param reward: reward associated with current history/observation/state
     :param prior: action -> probability mapping of current history/observation/state
     :param noise_dirichlet_alpha: level of noise added to ``prior`` of root children
@@ -1225,7 +1231,7 @@ def mcts(
 
     info: Info = initiate_info()
 
-    root_node = tree_constructor()
+    root_node = tree_constructor(info)
 
     t = timer()
 
@@ -1298,7 +1304,7 @@ def deterministic_tree_search(
 
     info: Info = initiate_info()
 
-    root_node = tree_constructor(history_representation)
+    root_node = tree_constructor(history_representation, info)
 
     t = timer()
 
@@ -1393,7 +1399,9 @@ def create_POUCT(
         return real_stop_cond(info) or pbar(info)
 
     tree_constructor = partial(
-        create_root_node_with_child_for_all_actions, actions, init_stats
+        create_root_node_with_child_for_all_actions,
+        actions=actions,
+        init_stats=init_stats,
     )
     node_scoring_method = partial(ucb_scores, ucb_constant=ucb_constant)
     leaf_select = partial(
@@ -1465,10 +1473,11 @@ def create_muzero(
     """
     stop_cond = partial(has_simulated_n_times, num_sims)
 
-    def tree_constructor(history_representation: Any):
+    def tree_constructor(history_representation: Any, info):
         inference = initial_inference(history_representation)
         return create_muzero_root(
             inference.latent_state,
+            info,
             inference.reward,
             inference.policy,
             root_noise_dirichlet_alpha,

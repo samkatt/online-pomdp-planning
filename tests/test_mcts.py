@@ -192,7 +192,7 @@ def test_has_simulated_n_times_asserts():
 )
 def test_create_root_node_with_child_for_all_actions(actions, init_stats):
     """Tests :func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`"""
-    node = create_root_node_with_child_for_all_actions(actions, init_stats)
+    node = create_root_node_with_child_for_all_actions({}, actions, init_stats)
 
     for a in actions:
         assert node.action_node(a).stats == init_stats
@@ -209,7 +209,12 @@ def test_create_muzero_root():
     noise_exploration_fraction = 0.2
 
     root = create_muzero_root(
-        latent_state, reward, prior, noise_dirichlet_alpha, noise_exploration_fraction
+        latent_state,
+        {},
+        reward,
+        prior,
+        noise_dirichlet_alpha,
+        noise_exploration_fraction,
     )
 
     assert root.stats["latent_state"] == latent_state
@@ -233,13 +238,13 @@ def test_create_muzero_root():
     # tests on prior and setting noise
     # little noise:
     root = create_muzero_root(
-        latent_state, reward, prior, noise_dirichlet_alpha, 0.000001
+        latent_state, {}, reward, prior, noise_dirichlet_alpha, 0.000001
     )
     for a, stat in root.child_stats.items():
         assert pytest.approx(stat["prior"], rel=0.001) == prior[a]
 
     # much noise:
-    root = create_muzero_root(latent_state, reward, prior, 100000, 1)
+    root = create_muzero_root(latent_state, {}, reward, prior, 100000, 1)
     for a, stat in root.child_stats.items():
         assert pytest.approx(stat["prior"], rel=0.01) == 1 / 3
 
