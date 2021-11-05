@@ -2,7 +2,7 @@
 import random
 from collections import Counter
 from typing import Counter as CounterType
-from typing import Dict, List, Tuple
+from typing import Dict, List, Mapping, Tuple
 
 import pytest
 
@@ -10,6 +10,7 @@ from online_pomdp_planning.mcts import (
     MuzeroInferenceOutput,
     create_muzero,
     create_POUCT,
+    create_POUCT_with_state_models,
 )
 from online_pomdp_planning.types import Action
 
@@ -52,6 +53,16 @@ class Tiger:
 
         return s, o, r, True
 
+    @staticmethod
+    def state_evaluation(s) -> Tuple[float, Mapping[int, float]]:
+        """A 'state-based model' for the Tiger
+
+        Hard-coded evaluation and prior for this problem.
+        """
+        good_door = s
+        bad_door = int(not s)
+        return 4.0, {Tiger.H: 5.0, good_door: 4.0, bad_door: -20}
+
 
 def uniform_tiger_belief():
     """Sampling returns 'left' and 'right' state equally"""
@@ -72,6 +83,34 @@ def test_pouct():
     """tests :func:`~online_pomdp_planning.mcts.create_POUCT` on Tiger"""
 
     planner = create_POUCT(Tiger.actions(), Tiger.sim, 2 * 16384, ucb_constant=100)
+
+    action, info = planner(uniform_tiger_belief)
+    assert action == Tiger.H
+    assert info["iteration"] == 16384 * 2
+
+    planner = create_POUCT(Tiger.actions(), Tiger.sim, 16384, ucb_constant=100)
+    action, info = planner(tiger_left_belief)
+    assert action == Tiger.L
+    assert info["iteration"] == 16384
+
+    planner = create_POUCT(
+        Tiger.actions(),
+        Tiger.sim,
+        16384,
+        ucb_constant=100,
+        leaf_eval=lambda s, o, t, info: 0,
+    )
+
+    action, info = planner(tiger_right_belief)
+    assert action == Tiger.R
+
+
+def test_pouct_with_prior():
+    """tests :func:`~online_pomdp_planning.mcts.create_POUCT_with_state_models` on Tiger"""
+
+    planner = create_POUCT_with_state_models(
+        Tiger.actions(), Tiger.sim, 2 * 16384, Tiger.state_evaluation, ucb_constant=100
+    )
 
     action, info = planner(uniform_tiger_belief)
     assert action == Tiger.H

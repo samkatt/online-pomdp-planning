@@ -13,6 +13,7 @@ from online_pomdp_planning.mcts import (
     MuzeroInferenceOutput,
     ObservationNode,
     associate_prior_with_nodes,
+    associate_prior_with_nodes_of_child,
     backprop_running_q,
     create_muzero_root,
     create_root_node_with_child_for_all_actions,
@@ -192,7 +193,7 @@ def test_has_simulated_n_times_asserts():
 )
 def test_create_root_node_with_child_for_all_actions(actions, init_stats):
     """Tests :func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`"""
-    node = create_root_node_with_child_for_all_actions({}, actions, init_stats)
+    node = create_root_node_with_child_for_all_actions(None, {}, actions, init_stats)
 
     for a in actions:
         assert node.action_node(a).stats == init_stats
@@ -807,8 +808,53 @@ def test_rollout():
     ), "1 depth should allow 1 action"
 
 
-def test_associate_prior_with_nodes():
+@pytest.mark.parametrize(
+    "prior", [{"a1": 1.0}, {"a1": 0.5, "a2": 0.5}, {True: 0.2, False: 0.5, "blah": 0.3}]
+)
+def test_associate_prior_with_nodes(prior):
     """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes`"""
+    parent = ObservationNode()
+    nodes = {a: ActionNode({}, parent) for a in prior}
+
+    associate_prior_with_nodes(nodes, prior)
+
+    for a, p in prior.items():
+        assert nodes[a].stats["prior"] == p
+
+
+def test_associate_prior_with_nodes_errors():
+    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes_of_child` with wrong input"""
+    actions = ["a1", "a2"]
+
+    # test that 'with child' fails with wrong number of children
+    root = ObservationNode()
+    an = ActionNode({}, root)
+
+    with pytest.raises(AssertionError):
+        associate_prior_with_nodes_of_child(an, None, {"some_prior": 0.3}, {})
+
+    an.add_observation_node("o1", ObservationNode(an))
+    an.add_observation_node("o2", ObservationNode(an))
+
+    with pytest.raises(AssertionError):
+        associate_prior_with_nodes_of_child(an, None, {}, {})
+
+    # test mistakes in mismatches in prior and nodes
+    nodes = {a: ActionNode({}, root) for a in actions}
+
+    with pytest.raises(AssertionError):
+        associate_prior_with_nodes(nodes, {})
+
+    with pytest.raises(AssertionError):
+        too_many_actions = {"new_action": 0.4, **{a: 0.2 for a in actions}}
+        associate_prior_with_nodes(nodes, too_many_actions)
+
+    with pytest.raises(KeyError):
+        associate_prior_with_nodes(nodes, {"a1": 0.1, "a3": 0.9})
+
+
+def test_associate_prior_with_nodes_of_child():
+    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes_of_child`"""
     actions = ["a1", "a2", True]
 
     # construct simple tree
@@ -821,37 +867,10 @@ def test_associate_prior_with_nodes():
     an.add_observation_node("obs1", on)
 
     prior = {"a1": 0.2, "a2": 0.3, True: 0.5}
-    associate_prior_with_nodes(an, None, prior, {})
+    associate_prior_with_nodes_of_child(an, None, prior, {})
 
     for a, p in prior.items():
         assert on.action_node(a).stats["prior"] == p
-
-
-def test_associate_prior_with_nodes_errors():
-    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes` with wrong input"""
-    actions = ["a1", "a2"]
-
-    # construct simple tree
-    root = ObservationNode()
-    an = ActionNode({}, root)
-    on = ObservationNode(an)
-    for a in actions:
-        on.add_action_node(a, ActionNode({}, on))
-
-    with pytest.raises(ValueError):
-        associate_prior_with_nodes(an, None, {}, {})
-
-    an.add_observation_node("obs1", on)
-
-    with pytest.raises(AssertionError):
-        associate_prior_with_nodes(an, None, {}, {})
-
-    with pytest.raises(AssertionError):
-        too_many_actions = {"new_action": 0.4, **{a: 0.2 for a in actions}}
-        associate_prior_with_nodes(an, None, too_many_actions, {})
-
-    with pytest.raises(KeyError):
-        associate_prior_with_nodes(an, None, {"a1": 0.1, "a3": 0.9}, {})
 
 
 if __name__ == "__main__":

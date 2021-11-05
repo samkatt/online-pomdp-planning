@@ -10,7 +10,7 @@ from typing import (
     Any,
     Callable,
     Dict,
-    Iterator,
+    Iterable,
     List,
     Mapping,
     NamedTuple,
@@ -660,7 +660,7 @@ class DeterministicNodeExpansion(Protocol):
 
 
 def expand_node_with_all_actions(
-    actions: Iterator[Action],
+    actions: Iterable[Action],
     init_stats: Any,
     o: Observation,
     action_node: ActionNode,
@@ -847,6 +847,9 @@ def state_based_model_evaluation(
     :param model: used to evaluate ``s`` (value *and* prior)
 
     """
+    if t:
+        return 0, {}
+
     return model(s)
 
 
@@ -992,30 +995,57 @@ def deterministic_qval_backpropagation(
 
 
 def associate_prior_with_nodes(
+    nodes: Mapping[Action, ActionNode],
+    prior: Mapping[Action, float],
+) -> None:
+    """Stores ``prior`` in ``nodes``
+
+    Assumes that the actions in ``nodes`` and ``prior`` match and will set the
+    "prior" entry in ``n.stats`` for each ``n`` in ``nodes`` to it respective
+    ``p`` in ``prior``.
+
+    :param nodes: action => node mapping, where the node stats are updated
+    :param prior: action => prior mapping, where the priors are stored in ``nodes``
+    """
+    assert len(nodes) == len(prior)
+    for action, node in nodes.items():
+        node.stats["prior"] = prior[action]
+
+
+def associate_prior_with_nodes_of_child(
     n: ActionNode,
     leaf_selection_output: Any,
     leaf_eval_output: Mapping[Action, float],
     info: Info,
 ) -> None:
-    """Store prior in ``leaf_eval_output`` into correct nodes
+    """Store prior in ``leaf_eval_output`` into correct nodes (in child of ``n``)
 
-    Each child of ``n`` will have a ``prior`` stored in their ``stats``
+    ``n`` is an action node that assumes to have exactly one child, the one
+    that was recently added. The action nodes *of that child* will have a
+    ``prior`` stored in their ``stats``
 
-    Implements :class:`BackPropagation`
+    Implements :class:`BackPropagation`, calls
+    :func:`associate_prior_with_nodes` under the hood on the correct nodes.
+
+    NOTE::
+
+        There is a case where ``n`` has *no children*, which is when it is a
+        terminal leaf. In that case we check that ``leaf_eval_output`` is
+        indeed also empty and simply return
 
     :param n: node that was expanded, it's children get a prior
-    :param leaf_eval_output: ignored
+    :param leaf_selection_output: ignored
     :param leaf_eval_output: the action => probability prior
     :param info: ignored
     """
+    if not n.observation_nodes:
+        assert not leaf_eval_output
+        return
+
+    assert len(n.observation_nodes) == 1
+
     observation_node = mitt.one(n.observation_nodes.items())[1]
-
-    assert len(observation_node.action_nodes) == len(
-        leaf_eval_output
-    ), "Prior mapping and observation node have different actions"
-
-    for action, node in observation_node.action_nodes.items():
-        node.stats["prior"] = leaf_eval_output[action]
+    associate_prior_with_nodes(observation_node.action_nodes, leaf_eval_output)
 
 
 class ActionSelection(Protocol):
@@ -1115,7 +1145,7 @@ class TreeConstructor(Protocol):
     .. automethod:: __call__
     """
 
-    def __call__(self, info: Info) -> ObservationNode:
+    def __call__(self, belief: Belief, info: Info) -> ObservationNode:
         """Creates a root node out of nothing
 
         :return: The root node
@@ -1136,14 +1166,16 @@ class DeterministicTreeConstructor(Protocol):
 
 
 def create_root_node_with_child_for_all_actions(
+    belief: Belief,
     info: Info,
-    actions: Iterator[Action],
+    actions: Iterable[Action],
     init_stats: Any,
 ) -> ObservationNode:
     """Creates a tree by initiating the first action nodes
 
     Implements :class:`TreeConstructor` given ``actions`` and ``init_stats``
 
+    :param belief: ignored
     :param info: ignored
     :param actions: the actions to initiate nodes for
     :param init_stats: the initial statistics of those nodes
@@ -1257,7 +1289,7 @@ def mcts(
 
     info: Info = initiate_info()
 
-    root_node = tree_constructor(info)
+    root_node = tree_constructor(belief, info)
 
     t = timer()
 
@@ -1399,6 +1431,7 @@ def create_POUCT(
     assert num_sims > 0 and max_tree_depth > 0 and horizon > 0
 
     max_tree_depth = min(max_tree_depth, horizon)
+    action_list = list(actions)
 
     # defaults
     if not leaf_eval:
@@ -1407,7 +1440,7 @@ def create_POUCT(
         def leaf_eval(s: State, o: Observation, t: bool, info: Info):
             """Evaluates a leaf (:class:`LeafSelection`) through random rollout"""
             depth = min(rollout_depth, horizon - info["leaf_depth"])
-            policy = partial(random_policy, actions)
+            policy = partial(random_policy, action_list)
 
             return rollout(policy, sim, depth, discount_factor, s, o, t, info)
 
@@ -1425,14 +1458,14 @@ def create_POUCT(
 
     tree_constructor = partial(
         create_root_node_with_child_for_all_actions,
-        actions=actions,
+        actions=action_list,
         init_stats=init_stats,
     )
     node_scoring_method = partial(ucb_scores, ucb_constant=ucb_constant)
     leaf_select = partial(
         select_leaf_by_max_scores, sim, node_scoring_method, max_tree_depth
     )
-    expansion = partial(expand_node_with_all_actions, actions, init_stats)
+    expansion = partial(expand_node_with_all_actions, action_list, init_stats)
     backprop = partial(backprop_running_q, discount_factor)
     action_select = max_q_action_selector
 
@@ -1463,6 +1496,11 @@ def create_POUCT_with_state_models(
     Returns an instance of :func:`mcts` where the components have been
     filled in.
 
+    In particular, it uses the ``state_based_model`` to evaluate *and* get a
+    prior whenever a node is expanded. Additionally, at the root creation a
+    hundred states will be sampled to generate an (average) prior over the root
+    action nodes.
+
     :param actions: all the actions available to the agent
     :param sim: a simulator of the environment
     :param num_sims: number of simulations to run
@@ -1475,6 +1513,9 @@ def create_POUCT_with_state_models(
     """
     assert num_sims > 0 and max_tree_depth > 0
 
+    init_stats = {"qval": 0, "n": 0}
+    action_list = list(actions)
+
     # stop condition: keep track of `pbar` if `progress_bar` is set
     pbar = no_stop
     if progress_bar:
@@ -1483,19 +1524,29 @@ def create_POUCT_with_state_models(
 
     def stop_condition(info: Info) -> bool:
         return real_stop_cond(info) or pbar(info)
-    init_stats = {"qval": 0, "n": 0}
-    # TODO: update
-    tree_constructor = partial(
-        create_root_node_with_child_for_all_actions,
-        actions=actions,
-        init_stats=init_stats,
-    )
+
+    def tree_constructor(belief: Belief, info: Info) -> ObservationNode:
+        """Custom-made tree concstructor
+
+        Stores *average* prior (wrt belief) into root action nodes
+        """
+        root = create_root_node_with_child_for_all_actions(
+            belief, info, action_list, init_stats
+        )
+
+        # approximate the beleif prior by average over (100) states
+        priors = [state_based_model(belief())[1] for _ in range(100)]
+        avg_prior = {a: np.mean([p[a] for p in priors]) for a in actions}
+
+        associate_prior_with_nodes(root.action_nodes, avg_prior)
+
+        return root
 
     node_scoring_method = partial(ucb_scores, ucb_constant=ucb_constant)
     leaf_select = partial(
         select_leaf_by_max_scores, sim, node_scoring_method, max_tree_depth
     )
-    expansion = partial(expand_node_with_all_actions, actions, init_stats)
+    expansion = partial(expand_node_with_all_actions, action_list, init_stats)
     leaf_eval = partial(state_based_model_evaluation, model=state_based_model)
 
     def store_prior_and_backprop(
@@ -1508,7 +1559,9 @@ def create_POUCT_with_state_models(
 
         Method for state-based models: assumes a value *and* prior is returned in ``leaf_eval_output``
         """
-        associate_prior_with_nodes(n, leaf_selection_output, leaf_eval_output[1], info)
+        associate_prior_with_nodes_of_child(
+            n, leaf_selection_output, leaf_eval_output[1], info
+        )
         backprop_running_q(
             discount_factor, n, leaf_selection_output, leaf_eval_output[0], info
         )
