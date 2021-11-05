@@ -824,6 +824,32 @@ def rollout(
     return ret
 
 
+def state_based_model_evaluation(
+    s: State,
+    o: Observation,
+    t: bool,
+    info: Info,
+    model: Callable[[State], Tuple[float, Mapping[Action, float]]],
+) -> Tuple[float, Mapping[Action, float]]:
+    """A :class:`Evaluation` based on a state-based ``model``
+
+    Assumes ``model`` returns both the (discounted return)
+    value of ``s`` and a prior policy (mapping from action to its probability)
+
+    The actual code in this function is meaningless outside of the fact that it
+    provides a wrapper for ``model``  and converts it to a leaf
+    :class:`Evaluation`.
+
+    :param s: state to be evaluated by ``model``
+    :param o: ignored
+    :param t: if ``true``, will cause this function to return zeros
+    :param info: ignored
+    :param model: used to evaluate ``s`` (value *and* prior)
+
+    """
+    return model(s)
+
+
 class BackPropagation(Protocol):
     """The signature for back propagation through nodes
 
@@ -1347,7 +1373,6 @@ def create_POUCT(
         If you want MCTS to honor different timesteps, then call this function
         for every time step with an updated value for ``horizon``.
 
-
     There are multiple 'depths' to be set in POUCT. In particular there is the
     ``rollout_depth``, which specifies how many timesteps the random policy
     iterates in order to evaluate a leaf. Second the ``max_tree_depth`` is the
@@ -1419,6 +1444,85 @@ def create_POUCT(
         expansion,
         leaf_eval,
         backprop,
+        action_select,
+    )
+
+
+def create_POUCT_with_state_models(
+    actions: Sequence[Action],
+    sim: Simulator,
+    num_sims: int,
+    state_based_model: Callable[[State], Tuple[float, Mapping[Action, float]]],
+    ucb_constant: float = 1,
+    max_tree_depth: int = 100,
+    discount_factor: float = 0.95,
+    progress_bar: bool = False,
+) -> Planner:
+    """Creates PO-UCT given the available actions and a simulator
+
+    Returns an instance of :func:`mcts` where the components have been
+    filled in.
+
+    :param actions: all the actions available to the agent
+    :param sim: a simulator of the environment
+    :param num_sims: number of simulations to run
+    :param state_based_model: the evaluation of leaves, defaults to ``None``, which assumes a random rollout
+    :param ucb_constant: exploration constant used in UCB, defaults to 1
+    :param max_tree_depth: the depth the tree is allowed to grow to, defaults to 100
+    :param discount_factor: the discount factor of the environment, defaults to 0.95
+    :param progress_bar: flag to output a progress bar, defaults to False
+    :return: MCTS with planner signature (given num sims)
+    """
+    assert num_sims > 0 and max_tree_depth > 0
+
+    # stop condition: keep track of `pbar` if `progress_bar` is set
+    pbar = no_stop
+    if progress_bar:
+        pbar = ProgressBar(num_sims)
+    real_stop_cond = partial(has_simulated_n_times, num_sims)
+
+    def stop_condition(info: Info) -> bool:
+        return real_stop_cond(info) or pbar(info)
+    init_stats = {"qval": 0, "n": 0}
+    # TODO: update
+    tree_constructor = partial(
+        create_root_node_with_child_for_all_actions,
+        actions=actions,
+        init_stats=init_stats,
+    )
+
+    node_scoring_method = partial(ucb_scores, ucb_constant=ucb_constant)
+    leaf_select = partial(
+        select_leaf_by_max_scores, sim, node_scoring_method, max_tree_depth
+    )
+    expansion = partial(expand_node_with_all_actions, actions, init_stats)
+    leaf_eval = partial(state_based_model_evaluation, model=state_based_model)
+
+    def store_prior_and_backprop(
+        n: ActionNode,
+        leaf_selection_output: Any,
+        leaf_eval_output: Tuple[float, Mapping[Action, float]],
+        info: Info,
+    ):
+        """Custom-made backpropagation
+
+        Method for state-based models: assumes a value *and* prior is returned in ``leaf_eval_output``
+        """
+        associate_prior_with_nodes(n, leaf_selection_output, leaf_eval_output[1], info)
+        backprop_running_q(
+            discount_factor, n, leaf_selection_output, leaf_eval_output[0], info
+        )
+
+    action_select = max_q_action_selector
+
+    return partial(
+        mcts,
+        stop_condition,
+        tree_constructor,
+        leaf_select,
+        expansion,
+        leaf_eval,
+        store_prior_and_backprop,
         action_select,
     )
 

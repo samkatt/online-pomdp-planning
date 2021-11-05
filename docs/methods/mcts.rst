@@ -130,6 +130,7 @@ effective implementations can be domain-specific policies or evaluation models
 Provided implementations:
 
     - :func:`~online_pomdp_planning.mcts.rollout`
+    - :func:`~online_pomdp_planning.mcts.state_based_model_evaluation`
 
 Back propagation
 ----------------
