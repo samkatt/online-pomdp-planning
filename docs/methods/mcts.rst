@@ -163,6 +163,8 @@ in the root node.
 Provided implementations:
 
     - :func:`~online_pomdp_planning.mcts.max_q_action_selector` picks the action with max q value
+    - :func:`~online_pomdp_planning.mcts.max_visits_action_selector` picks the action with max visits
+    - :func:`~online_pomdp_planning.mcts.visit_prob_action_selector` sample the action according to visitation
 
 A common method is to pick the action with highest associated average return.
 
