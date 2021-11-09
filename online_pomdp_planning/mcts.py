@@ -1178,8 +1178,8 @@ def mcts(
         # Either (1) the last transition was terminal, or (2) `leaf` is
         # actually not a leaf. (2) happens, for example, when `leaf_select`
         # has a max depth it will go. We capture this (hopefully) by checking
-        # if there are any children in `leaf`.
-        if not terminal_flag and len(leaf.observation_nodes) == 0:
+        # if there is already a node associated with the observation
+        if not terminal_flag and obs not in leaf.observation_nodes:
             expand(obs, leaf, info)
 
         evaluation = evaluate(state, obs, terminal_flag, info)
