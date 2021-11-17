@@ -1531,7 +1531,7 @@ def create_POUCT_with_state_models(
     :param actions: all the actions available to the agent
     :param sim: a simulator of the environment
     :param num_sims: number of simulations to run
-    :param state_based_model: the evaluation of leaves, defaults to ``None``, which assumes a random expand_and_rollout
+    :param state_based_model: the state-based evaluation model
     :param ucb_constant: exploration constant used in UCB, defaults to 1
     :param max_tree_depth: the depth the tree is allowed to grow to, defaults to 100
     :param discount_factor: the discount factor of the environment, defaults to 0.95
