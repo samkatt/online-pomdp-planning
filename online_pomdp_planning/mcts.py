@@ -582,7 +582,6 @@ def select_leaf_by_max_scores(
 
     # info tracking tree depth
     info["ucb_tree_depth"].add(depth)
-
     info["leaf_depth"] = depth
 
     return node.action_node(action), state, obs, terminal_flag, list_of_rewards
@@ -630,6 +629,11 @@ def select_deterministc_leaf_by_max_scores(
 
 class Expansion(Protocol):
     """The signature for leaf node expansion
+
+
+    A 'helper' interface for the :class:`ExpandAndEvaluate` interface, making
+    it easy for various expansion and evaluation methods to be combined since
+    they are often separate concers.
 
     .. automethod:: __call__
     """
@@ -733,15 +737,23 @@ def muzero_expand_node(
     return network_output.value
 
 
-class Evaluation(Protocol):
+class ExpandAndEvaluate(Protocol):
     """The signature of leaf node evaluation
+
+    Expansion and evaluation are often separate concerns, so many of the
+    methods implementing this interface may directly accept an
+    :class:`Expansion` to easily combine different expansion and evaluation
+    techniques.
 
     .. automethod:: __call__
     """
 
-    def __call__(self, s: State, o: Observation, t: bool, info: Info) -> Any:
+    def __call__(
+        self, leaf: ActionNode, s: State, o: Observation, t: bool, info: Info
+    ) -> Any:
         """Evaluates a leaf node
 
+        :param leaf: leaf to expand and evaluate
         :param s: state to evaluate
         :param o: observation to evaluate
         :param t: whether the episode terminated
@@ -780,22 +792,32 @@ def rollout(
     sim: Simulator,
     depth: int,
     discount_factor: float,
+    expansion_strategy: Expansion,
+    leaf: ActionNode,
     s: State,
     o: Observation,
     t: bool,
     info: Info,
 ) -> float:
-    """Performs a rollout in ``sim`` according to ``policy``
+    """Expands ``leaf`` according to ``expansion_strategy`` and evaluate with ``policy``
 
     If ``policy``, ``sim``, ``depth``, and ``discount_factor`` are given, this
-    implements :class:`Evaluation` where it returns a float as metric
+    implements :class:`ExpandAndEvaluate` where it returns a float as metric.
+
+    Runs ``policy`` in ``sims`` until some depth or terminal transition and
+    returns the (discounted) return.
 
     When the terminal flag ``t`` is set, this function will return 0.
 
-    :param policy:
+    ``rollout`` does not really care about how ``leaf`` is expanded, it
+    accepts any :class:`Expansion`. Will expand ``leaf`` before performing rollout.
+
+    :param policy: rollout policy
     :param sim: a POMDP simulator
     :param depth: the longest number of actions to take
     :param discount_factor: discount factor of the problem
+    :param expansion_strategy: how to expand ``leaf``
+    :param leaf: leaf to expand and evaluate
     :param s: starting state
     :param o: starting observation
     :param t: whether the episode has terminated
@@ -806,9 +828,10 @@ def rollout(
     assert depth >= 0, "prevent never ending loop"
 
     ret = 0.0
-
     if t or depth == 0:
         return ret
+
+    expansion_strategy(o, leaf, info)
 
     discount = 1.0
     for _ in range(depth):
@@ -825,32 +848,43 @@ def rollout(
 
 
 def state_based_model_evaluation(
+    leaf: ActionNode,
     s: State,
     o: Observation,
     t: bool,
     info: Info,
     model: Callable[[State], Tuple[float, Mapping[Action, float]]],
-) -> Tuple[float, Mapping[Action, float]]:
-    """A :class:`Evaluation` based on a state-based ``model``
+) -> float:
+    """Evaluates ``leaf`` through ``model`` on ``s`` and stores prior
 
-    Assumes ``model`` returns both the (discounted return)
-    value of ``s`` and a prior policy (mapping from action to its probability)
+    Assumes ``model`` returns both the (discounted return) value of ``s`` and a
+    prior policy (mapping from action to its probability)
 
-    The actual code in this function is meaningless outside of the fact that it
-    provides a wrapper for ``model``  and converts it to a leaf
-    :class:`Evaluation`.
+    Will expand a new :class:`ObservationNode` under ``leaf`` with a child for
+    each action (prior) outputted by the ``moddel``, returns the predicted
+    value.
 
+    Given ``model`` implements :class:`ExpandAndEvaluate`.
+
+    :param leaf: leaf to expand
     :param s: state to be evaluated by ``model``
     :param o: ignored
     :param t: if ``true``, will cause this function to return zeros
     :param info: ignored
     :param model: used to evaluate ``s`` (value *and* prior)
-
+    :return: the value as predicted by ``model``
     """
     if t:
-        return 0, {}
+        return 0
 
-    return model(s)
+    v, prior = model(s)
+
+    # XXX: hard-coded initial values and call to expand node down here is ugly
+    expand_node_with_all_actions(prior.keys(), {"qval": 0, "n": 0}, o, leaf, info)
+
+    associate_prior_with_nodes(leaf.observation_node(o).action_nodes, prior)
+
+    return v
 
 
 class BackPropagation(Protocol):
@@ -916,7 +950,7 @@ def backprop_running_q(
 
     Given a ``discount_factor``, implements :class:`BackPropagation` with a
     list of rewards as input from :class:`LeafSelection` and a return estimate
-    (float) from :class:`Evaluation`.
+    (float) from :class:`ExpandAndEvaluate`.
 
     :param discount_factor: 'gamma' of the POMDP environment [0, 1]
     :param leaf: leaf node
@@ -1247,8 +1281,7 @@ def mcts(
     stop_cond: StopCondition,
     tree_constructor: TreeConstructor,
     leaf_select: LeafSelection,
-    expand: Expansion,
-    evaluate: Evaluation,
+    expand_and_eval: ExpandAndEvaluate,
     backprop: BackPropagation,
     action_select: ActionSelection,
     belief: Belief,
@@ -1259,8 +1292,7 @@ def mcts(
     simulation:
 
     #. Selects a leaf (action) node through ``leaf_select``
-    #. Expands the leaf node through ``expand``
-    #. Evaluates the leaf node through ``evaluate``
+    #. Expands and evaluates the leaf node through ``expand_and_eval``
     #. Back propagates and updates node values through ``backprop``
 
     After spending the simulation budget, it picks an given the statistics
@@ -1279,8 +1311,7 @@ def mcts(
     :param stop_cond: the function that returns whether simulating should stop
     :param tree_constructor: constructor the tree
     :param leaf_select: the method for selecting leaf nodes
-    :param expand: the leaf expansion method
-    :param evaluate: the leaf evaluation method
+    :param expand_and_eval: the leaf evaluation method
     :param backprop: the method for updating the statistics in the visited nodes
     :param action_select: the method for picking an action given root node
     :param belief: the current belief (over the state) at the root node
@@ -1301,15 +1332,7 @@ def mcts(
             state, root_node, info
         )
 
-        # So there are two scenarios in which `leaf` should not be expanded.
-        # Either (1) the last transition was terminal, or (2) `leaf` is
-        # actually not a leaf. (2) happens, for example, when `leaf_select`
-        # has a max depth it will go. We capture this (hopefully) by checking
-        # if there are any children in `leaf`.
-        if not terminal_flag and len(leaf.observation_nodes) == 0:
-            expand(obs, leaf, info)
-
-        evaluation = evaluate(state, obs, terminal_flag, info)
+        evaluation = expand_and_eval(leaf, state, obs, terminal_flag, info)
         backprop(leaf, selection_output, evaluation, info)
 
         info["iteration"] += 1
@@ -1353,7 +1376,7 @@ def deterministic_tree_search(
     :param stop_cond: the function that returns whether simulating should stop
     :param tree_constructor: constructor the tree
     :param leaf_select: the method for selecting leaf nodes
-    :param expand_and_evaluate: the leaf expansion method
+    :param expand_and_evaluate: the leaf expansion and evaluation method
     :param backprop: the method for updating the statistics in the visited nodes
     :param action_select: the method for picking an action given root node
     :param history_representation: whatever the input to ``tree_constructor``
@@ -1385,7 +1408,7 @@ def create_POUCT(
     sim: Simulator,
     num_sims: int,
     init_stats: Any = None,
-    leaf_eval: Optional[Evaluation] = None,
+    leaf_eval: Optional[ExpandAndEvaluate] = None,
     ucb_constant: float = 1,
     horizon: int = 100,
     rollout_depth: int = 100,
@@ -1432,17 +1455,29 @@ def create_POUCT(
 
     max_tree_depth = min(max_tree_depth, horizon)
     action_list = list(actions)
+    expansion_strategy = partial(expand_node_with_all_actions, action_list, init_stats)
 
     # defaults
     if not leaf_eval:
         assert rollout_depth > 0
 
-        def leaf_eval(s: State, o: Observation, t: bool, info: Info):
-            """Evaluates a leaf (:class:`LeafSelection`) through random rollout"""
+        def leaf_eval(leaf: ActionNode, s: State, o: Observation, t: bool, info: Info):
+            """Evaluates a leaf (:class:`ExpandAndEvaluate`) through random rollout"""
             depth = min(rollout_depth, horizon - info["leaf_depth"])
             policy = partial(random_policy, action_list)
 
-            return rollout(policy, sim, depth, discount_factor, s, o, t, info)
+            return rollout(
+                policy,
+                sim,
+                depth,
+                discount_factor,
+                expansion_strategy,
+                leaf,
+                s,
+                o,
+                t,
+                info,
+            )
 
     if not init_stats:
         init_stats = {"qval": 0, "n": 0}
@@ -1465,7 +1500,6 @@ def create_POUCT(
     leaf_select = partial(
         select_leaf_by_max_scores, sim, node_scoring_method, max_tree_depth
     )
-    expansion = partial(expand_node_with_all_actions, action_list, init_stats)
     backprop = partial(backprop_running_q, discount_factor)
     action_select = max_q_action_selector
 
@@ -1474,7 +1508,6 @@ def create_POUCT(
         stop_condition,
         tree_constructor,
         leaf_select,
-        expansion,
         leaf_eval,
         backprop,
         action_select,
@@ -1542,29 +1575,13 @@ def create_POUCT_with_state_models(
 
         return root
 
-    node_scoring_method = partial(ucb_scores, ucb_constant=ucb_constant)
+    node_scoring_method = partial(ucb_with_prior_scores, ucb_constant=ucb_constant)
     leaf_select = partial(
         select_leaf_by_max_scores, sim, node_scoring_method, max_tree_depth
     )
-    expansion = partial(expand_node_with_all_actions, action_list, init_stats)
     leaf_eval = partial(state_based_model_evaluation, model=state_based_model)
 
-    def store_prior_and_backprop(
-        n: ActionNode,
-        leaf_selection_output: Any,
-        leaf_eval_output: Tuple[float, Mapping[Action, float]],
-        info: Info,
-    ):
-        """Custom-made backpropagation
-
-        Method for state-based models: assumes a value *and* prior is returned in ``leaf_eval_output``
-        """
-        associate_prior_with_nodes_of_child(
-            n, leaf_selection_output, leaf_eval_output[1], info
-        )
-        backprop_running_q(
-            discount_factor, n, leaf_selection_output, leaf_eval_output[0], info
-        )
+    backprop = partial(backprop_running_q, discount_factor)
 
     action_select = max_q_action_selector
 
@@ -1573,9 +1590,8 @@ def create_POUCT_with_state_models(
         stop_condition,
         tree_constructor,
         leaf_select,
-        expansion,
         leaf_eval,
-        store_prior_and_backprop,
+        backprop,
         action_select,
     )
 

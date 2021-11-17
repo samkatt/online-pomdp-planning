@@ -812,7 +812,7 @@ def test_rollout():
     "prior", [{"a1": 1.0}, {"a1": 0.5, "a2": 0.5}, {True: 0.2, False: 0.5, "blah": 0.3}]
 )
 def test_associate_prior_with_nodes(prior):
-    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes`"""
+    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes_of_child`"""
     parent = ObservationNode()
     nodes = {a: ActionNode({}, parent) for a in prior}
 
