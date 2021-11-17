@@ -61,7 +61,7 @@ class Tiger:
         """
         good_door = s
         bad_door = int(not s)
-        return 4.0, {Tiger.H: 5.0, good_door: 4.0, bad_door: -20}
+        return 4.0, {Tiger.H: 0.4, good_door: 0.4, bad_door: 0.2}
 
 
 def uniform_tiger_belief():
@@ -98,7 +98,7 @@ def test_pouct():
         Tiger.sim,
         16384,
         ucb_constant=100,
-        leaf_eval=lambda s, o, t, info: 0,
+        leaf_eval=lambda leaf, s, o, t, info: 0,
     )
 
     action, info = planner(tiger_right_belief)
@@ -108,15 +108,21 @@ def test_pouct():
 def test_pouct_with_prior():
     """tests :func:`~online_pomdp_planning.mcts.create_POUCT_with_state_models` on Tiger"""
 
+    ucb_constant = 0.5
+
     planner = create_POUCT_with_state_models(
-        Tiger.actions(), Tiger.sim, 2 * 16384, Tiger.state_evaluation, ucb_constant=100
+        Tiger.actions(),
+        Tiger.sim,
+        2 * 16384,
+        Tiger.state_evaluation,
+        ucb_constant=ucb_constant,
     )
 
     action, info = planner(uniform_tiger_belief)
     assert action == Tiger.H
     assert info["iteration"] == 16384 * 2
 
-    planner = create_POUCT(Tiger.actions(), Tiger.sim, 16384, ucb_constant=100)
+    planner = create_POUCT(Tiger.actions(), Tiger.sim, 16384, ucb_constant=ucb_constant)
     action, info = planner(tiger_left_belief)
     assert action == Tiger.L
     assert info["iteration"] == 16384
@@ -125,8 +131,8 @@ def test_pouct_with_prior():
         Tiger.actions(),
         Tiger.sim,
         16384,
-        ucb_constant=100,
-        leaf_eval=lambda s, o, t, info: 0,
+        ucb_constant=ucb_constant,
+        leaf_eval=lambda leaf, s, o, t, info: 0,
     )
 
     action, info = planner(tiger_right_belief)

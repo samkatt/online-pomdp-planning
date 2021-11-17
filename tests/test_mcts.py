@@ -12,12 +12,11 @@ from online_pomdp_planning.mcts import (
     DeterministicNode,
     MuzeroInferenceOutput,
     ObservationNode,
-    associate_prior_with_nodes,
-    associate_prior_with_nodes_of_child,
     backprop_running_q,
     create_muzero_root,
     create_root_node_with_child_for_all_actions,
     deterministic_qval_backpropagation,
+    expand_and_rollout,
     expand_node_with_all_actions,
     has_simulated_n_times,
     initiate_info,
@@ -187,16 +186,21 @@ def test_has_simulated_n_times_asserts():
 @pytest.mark.parametrize(
     "actions,init_stats",
     [
-        ([False, 1, (10, 2)], "some garbage"),
-        ([], {"qval": 10, "n": 0}),
+        (
+            [False, 1, (10, 2)],
+            {False: {"some garbage"}, 1: {"more gargbage"}, (10, 2): {"HAH"}},
+        ),
+        ((), {}),
     ],
 )
 def test_create_root_node_with_child_for_all_actions(actions, init_stats):
     """Tests :func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`"""
-    node = create_root_node_with_child_for_all_actions(None, {}, actions, init_stats)
+    node = create_root_node_with_child_for_all_actions(
+        None, {}, actions, lambda a: init_stats[a]
+    )
 
     for a in actions:
-        assert node.action_node(a).stats == init_stats
+        assert node.action_node(a).stats == init_stats[a]
         assert node.action_node(a).parent == node
         assert node.action_node(a).observation_nodes == {}
 
@@ -337,8 +341,12 @@ def test_visit_prob_action_selector(stats, tot, max_a):
 @pytest.mark.parametrize(
     "o,actions,init_stats",
     [
-        (10, [0, True, (10.0)], {"q-value": 0, "n": 0}),
-        (10, [0, (10.0)], {"q-value": 10, "n": 0}),
+        (
+            10,
+            [0, True, (10.0)],
+            {0: {"q-value": 0, "n": 0}, True: {"garbage"}, (10.0): {"tupled garb"}},
+        ),
+        (10, [0, (10.0)], {0: {"q-value": 10, "n": 0}, (10.0): {"some stuff"}}),
     ],
 )
 def test_expand_node_with_all_actions(o, actions, init_stats):
@@ -348,7 +356,7 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     node = ActionNode(stats, parent)
 
     info = {"mcts_num_action_nodes": 0}
-    expand_node_with_all_actions(actions, init_stats, o, node, info)
+    expand_node_with_all_actions(actions, lambda a: init_stats[a], o, node, info)
 
     expansion = node.observation_node(o)
 
@@ -357,11 +365,10 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     assert node.observation_node(o) is expansion
     assert len(expansion.action_nodes) == len(actions)
 
-    for n in expansion.action_nodes.values():
+    for a, n in expansion.action_nodes.items():
         assert len(n.observation_nodes) == 0
         assert n.parent == expansion
-        assert n.stats == init_stats
-        assert n.stats is not init_stats  # please be copy
+        assert n.stats == init_stats[a]
 
 
 def fake_muzero_recurrance_inference(
@@ -694,9 +701,21 @@ def test_backprop_running_q_assertion():
     """Tests that :func:`~online_pomdp_planning.mcts.backprop_running_q` raises bad discount"""
     some_obs_node = ObservationNode()
     with pytest.raises(AssertionError):
-        backprop_running_q(-1, ActionNode("gargabe", some_obs_node), [], 0, {})
+        backprop_running_q(
+            -1,
+            ActionNode("gargabe", some_obs_node),
+            [],
+            0,
+            {"q_statistic": MovingStatistic()},
+        )
     with pytest.raises(AssertionError):
-        backprop_running_q(1.1, ActionNode("gargabe", some_obs_node), [], 0, {})
+        backprop_running_q(
+            1.1,
+            ActionNode("gargabe", some_obs_node),
+            [],
+            0,
+            {"q_statistic": MovingStatistic()},
+        )
 
 
 @pytest.mark.parametrize(
@@ -719,7 +738,11 @@ def test_backprop_running_q(discount_factor, new_q_first, new_q_leaf):
     leaf_selection_output = [0.1, 7.0]
     leaf_evaluation = -5
     backprop_running_q(
-        discount_factor, leaf_node, leaf_selection_output, leaf_evaluation, {}
+        discount_factor,
+        leaf_node,
+        leaf_selection_output,
+        leaf_evaluation,
+        {"q_statistic": MovingStatistic()},
     )
 
     # lots of math by hand, hope this never needs to be re-computed
@@ -781,7 +804,6 @@ def test_rollout():
     pol = partial(random_policy, ([False, 1, (10, 2)]))
     discount_factor = 0.9
     depth = 3
-    terminal = False
     state = 1
     obs = 0
 
@@ -793,84 +815,59 @@ def test_rollout():
         """Returns the same as :func:`sim` but sets terminal flag to ``True``"""
         return 0, 2, 0.5, True
 
-    assert (
-        rollout(pol, term_sim, depth, discount_factor, state, obs, t=True, info={}) == 0
-    )
-    assert rollout(pol, term_sim, 0, discount_factor, state, obs, terminal, {}) == 0
+    assert rollout(pol, term_sim, 0, discount_factor, state, obs) == 0
 
     assert (
-        rollout(pol, term_sim, depth, discount_factor, state, obs, terminal, {}) == 0.5
+        rollout(pol, term_sim, depth, discount_factor, state, obs) == 0.5
     ), "terminal sim should allow 1 action"
 
     assert (
-        rollout(pol, sim, 2, discount_factor, state, obs, terminal, {})
-        == 0.5 + discount_factor * 0.5
+        rollout(pol, sim, 2, discount_factor, state, obs) == 0.5 + discount_factor * 0.5
     ), "1 depth should allow 1 action"
 
 
-@pytest.mark.parametrize(
-    "prior", [{"a1": 1.0}, {"a1": 0.5, "a2": 0.5}, {True: 0.2, False: 0.5, "blah": 0.3}]
-)
-def test_associate_prior_with_nodes(prior):
-    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes_of_child`"""
-    parent = ObservationNode()
-    nodes = {a: ActionNode({}, parent) for a in prior}
+def test_expand_and_rollout():
+    """Tests :func:`expansion`"""
 
-    associate_prior_with_nodes(nodes, prior)
+    pol = partial(random_policy, ([False, 1, (10, 2)]))
+    discount_factor = 0.9
+    depth = 3
+    state = 1
+    obs = 0
 
-    for a, p in prior.items():
-        assert nodes[a].stats["prior"] == p
+    def sim(s, a):
+        """Fake simulator, returns state 0, obs 2, reward .5 and not terminal"""
+        return 0, 2, 0.5, True
 
+    expansion_results = {}
 
-def test_associate_prior_with_nodes_errors():
-    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes_of_child` with wrong input"""
-    actions = ["a1", "a2"]
+    def save_expansion(o, a, info):
+        """Mock expansion"""
+        expansion_results["obs"] = o
+        expansion_results["leaf"] = a
+        expansion_results["info"] = info
 
-    # test that 'with child' fails with wrong number of children
-    root = ObservationNode()
-    an = ActionNode({}, root)
+    # test terminal flag will not do anything
+    ret = expand_and_rollout(
+        save_expansion, pol, sim, depth, discount_factor, "leaf!", state, obs, True, {}
+    )
 
-    with pytest.raises(AssertionError):
-        associate_prior_with_nodes_of_child(an, None, {"some_prior": 0.3}, {})
+    assert "leaf" not in expansion_results
+    assert "obs" not in expansion_results
+    assert "info" not in expansion_results
 
-    an.add_observation_node("o1", ObservationNode(an))
-    an.add_observation_node("o2", ObservationNode(an))
+    assert ret == 0.0
 
-    with pytest.raises(AssertionError):
-        associate_prior_with_nodes_of_child(an, None, {}, {})
+    # typical execution
+    ret = expand_and_rollout(
+        save_expansion, pol, sim, depth, discount_factor, "leaf!", state, obs, False, {}
+    )
 
-    # test mistakes in mismatches in prior and nodes
-    nodes = {a: ActionNode({}, root) for a in actions}
+    assert expansion_results["leaf"] == "leaf!"
+    assert expansion_results["obs"] == obs
+    assert expansion_results["info"] == {}
 
-    with pytest.raises(AssertionError):
-        associate_prior_with_nodes(nodes, {})
-
-    with pytest.raises(AssertionError):
-        too_many_actions = {"new_action": 0.4, **{a: 0.2 for a in actions}}
-        associate_prior_with_nodes(nodes, too_many_actions)
-
-    with pytest.raises(KeyError):
-        associate_prior_with_nodes(nodes, {"a1": 0.1, "a3": 0.9})
-
-
-def test_associate_prior_with_nodes_of_child():
-    """Tests :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes_of_child`"""
-    actions = ["a1", "a2", True]
-
-    # construct simple tree
-    root = ObservationNode()
-    an = ActionNode({}, root)
-    on = ObservationNode(an)
-    for a in actions:
-        on.add_action_node(a, ActionNode({}, on))
-
-    an.add_observation_node("obs1", on)
-
-    prior = {"a1": 0.2, "a2": 0.3, True: 0.5}
-    associate_prior_with_nodes_of_child(an, None, prior, {})
-
-    for a, p in prior.items():
-        assert on.action_node(a).stats["prior"] == p
+    assert ret == 0.5
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import random
-from copy import deepcopy
 from functools import partial
 from math import isclose, log, sqrt
 from timeit import default_timer as timer
@@ -19,7 +18,6 @@ from typing import (
     Tuple,
 )
 
-import more_itertools as mitt
 import numpy as np
 from tqdm import tqdm
 from typing_extensions import Protocol
@@ -77,9 +75,9 @@ class ActionNode:
         :param initial_statistics: anything you would like to store
         :param parent: the parent node in the tree
         """
+        self.stats = initial_statistics
         self.parent = parent
         self.observation_nodes: Dict[Observation, ObservationNode] = {}
-        self.stats = initial_statistics
 
     def add_observation_node(
         self, observation: Observation, observation_node: ObservationNode
@@ -106,6 +104,10 @@ class ActionNode:
         :return: child node
         """
         return self.observation_nodes[observation]
+
+    def __repr__(self) -> str:
+        """Pretty print action nodes"""
+        return f"ActionNode({self.stats}, {self.parent})"
 
 
 class ObservationNode:
@@ -156,6 +158,10 @@ class ObservationNode:
         :return: returns child node
         """
         return self.action_nodes[action]
+
+    def __repr__(self) -> str:
+        """Pretty print observation nodes"""
+        return f"ObservationNode({self.parent})"
 
 
 class DeterministicNode:
@@ -665,7 +671,7 @@ class DeterministicNodeExpansion(Protocol):
 
 def expand_node_with_all_actions(
     actions: Iterable[Action],
-    init_stats: Any,
+    init_stats: Callable[[Action], Any],
     o: Observation,
     action_node: ActionNode,
     info: Info,
@@ -675,8 +681,8 @@ def expand_node_with_all_actions(
     Expands ``action_node`` with new :class:`ObservationNode` with action
     child for each :class:`~online_pomdp_planning.types.Action`
 
-    When provided with the available actions and initial stats, this implements
-    :class:`Expansion`
+    When provided with the available actions and their respective initial
+    stats, this implements :class:`Expansion`
 
     NOTE: ``action_node`` must not have a child node associated with ``o`` or
     this will result in an ``AssertionError``
@@ -700,7 +706,7 @@ def expand_node_with_all_actions(
     expansion = ObservationNode(parent=action_node)
 
     for a in actions:
-        expansion.add_action_node(a, ActionNode(deepcopy(init_stats), expansion))
+        expansion.add_action_node(a, ActionNode(init_stats(a), expansion))
 
     action_node.add_observation_node(o, expansion)
 
@@ -787,12 +793,12 @@ def random_policy(actions: Sequence[Action], _: State, __: Observation) -> Actio
     return random.choice(actions)
 
 
-def rollout(
+def expand_and_rollout(
+    expansion_strategy: Expansion,
     policy: Policy,
     sim: Simulator,
     depth: int,
     discount_factor: float,
-    expansion_strategy: Expansion,
     leaf: ActionNode,
     s: State,
     o: Observation,
@@ -801,22 +807,23 @@ def rollout(
 ) -> float:
     """Expands ``leaf`` according to ``expansion_strategy`` and evaluate with ``policy``
 
-    If ``policy``, ``sim``, ``depth``, and ``discount_factor`` are given, this
-    implements :class:`ExpandAndEvaluate` where it returns a float as metric.
+    Given ``expansion_strategy``, ``policy``, ``sim``, ``depth``, and
+    ``discount_factor``, this implements :class:`ExpandAndEvaluate` where it
+    returns a float (discounted return) as metric.
 
-    Runs ``policy`` in ``sims`` until some depth or terminal transition and
-    returns the (discounted) return.
+    Calls :func:`rollout` after calling ``expansion_strategy```
 
-    When the terminal flag ``t`` is set, this function will return 0.
+    When the terminal flag ``t`` is set, this function will return 0 and does
+    not expand.
 
-    ``rollout`` does not really care about how ``leaf`` is expanded, it
-    accepts any :class:`Expansion`. Will expand ``leaf`` before performing rollout.
+    ``expand_and_rollout`` does not really care about how ``leaf`` is expanded, it
+    accepts any :class:`Expansion`. Will expand ``leaf`` before performing expand_and_rollout.
 
-    :param policy: rollout policy
+    :param expansion_strategy: how to expand ``leaf``
+    :param policy: expand_and_rollout policy
     :param sim: a POMDP simulator
     :param depth: the longest number of actions to take
     :param discount_factor: discount factor of the problem
-    :param expansion_strategy: how to expand ``leaf``
     :param leaf: leaf to expand and evaluate
     :param s: starting state
     :param o: starting observation
@@ -827,11 +834,38 @@ def rollout(
     assert 0 <= discount_factor <= 1
     assert depth >= 0, "prevent never ending loop"
 
-    ret = 0.0
     if t or depth == 0:
-        return ret
+        return 0.0
 
     expansion_strategy(o, leaf, info)
+    return rollout(policy, sim, depth, discount_factor, s, o)
+
+
+def rollout(
+    policy: Policy,
+    sim: Simulator,
+    depth: int,
+    discount_factor: float,
+    s: State,
+    o: Observation,
+) -> float:
+    """Do a rollout in ``sim`` starting from ``s`` following ``policy``
+
+    Runs ``policy`` in ``sims`` until some depth or terminal transition and
+    returns the (discounted) return.
+
+    :param policy: expand_and_rollout policy
+    :param sim: a POMDP simulator
+    :param depth: the longest number of actions to take
+    :param discount_factor: discount factor of the problem
+    :param s: starting state
+    :param o: starting observation
+    :return: the discounted return of following ``policy`` in ``sim``
+    """
+    assert 0 <= discount_factor <= 1
+    assert depth >= 0, "prevent never ending loop"
+
+    ret = 0.0
 
     discount = 1.0
     for _ in range(depth):
@@ -866,6 +900,8 @@ def state_based_model_evaluation(
 
     Given ``model`` implements :class:`ExpandAndEvaluate`.
 
+    XXX: hard-coded initial values and call to expand node down here is ugly
+
     :param leaf: leaf to expand
     :param s: state to be evaluated by ``model``
     :param o: ignored
@@ -879,10 +915,8 @@ def state_based_model_evaluation(
 
     v, prior = model(s)
 
-    # XXX: hard-coded initial values and call to expand node down here is ugly
-    expand_node_with_all_actions(prior.keys(), {"qval": 0, "n": 0}, o, leaf, info)
-
-    associate_prior_with_nodes(leaf.observation_node(o).action_nodes, prior)
+    init_stats = lambda a: {"qval": 0, "n": 1, "prior": prior[a]}
+    expand_node_with_all_actions(prior.keys(), init_stats, o, leaf, info)
 
     return v
 
@@ -952,6 +986,8 @@ def backprop_running_q(
     list of rewards as input from :class:`LeafSelection` and a return estimate
     (float) from :class:`ExpandAndEvaluate`.
 
+    Will close bounds `info["q_statistic"]`
+
     :param discount_factor: 'gamma' of the POMDP environment [0, 1]
     :param leaf: leaf node
     :param leaf_selection_output: list of rewards from tree policy
@@ -978,6 +1014,9 @@ def backprop_running_q(
         # store next stats
         stats["qval"] = (q * num + reverse_return) / (num + 1)
         stats["n"] = num + 1
+
+        # adjust bounds in `info`
+        info["q_statistic"].add(stats["qval"])
 
         # go up in tree
         n = n.parent.parent
@@ -1026,60 +1065,6 @@ def deterministic_qval_backpropagation(
 
         value *= discount_factor
         n = n.parent
-
-
-def associate_prior_with_nodes(
-    nodes: Mapping[Action, ActionNode],
-    prior: Mapping[Action, float],
-) -> None:
-    """Stores ``prior`` in ``nodes``
-
-    Assumes that the actions in ``nodes`` and ``prior`` match and will set the
-    "prior" entry in ``n.stats`` for each ``n`` in ``nodes`` to it respective
-    ``p`` in ``prior``.
-
-    :param nodes: action => node mapping, where the node stats are updated
-    :param prior: action => prior mapping, where the priors are stored in ``nodes``
-    """
-    assert len(nodes) == len(prior)
-    for action, node in nodes.items():
-        node.stats["prior"] = prior[action]
-
-
-def associate_prior_with_nodes_of_child(
-    n: ActionNode,
-    leaf_selection_output: Any,
-    leaf_eval_output: Mapping[Action, float],
-    info: Info,
-) -> None:
-    """Store prior in ``leaf_eval_output`` into correct nodes (in child of ``n``)
-
-    ``n`` is an action node that assumes to have exactly one child, the one
-    that was recently added. The action nodes *of that child* will have a
-    ``prior`` stored in their ``stats``
-
-    Implements :class:`BackPropagation`, calls
-    :func:`associate_prior_with_nodes` under the hood on the correct nodes.
-
-    NOTE::
-
-        There is a case where ``n`` has *no children*, which is when it is a
-        terminal leaf. In that case we check that ``leaf_eval_output`` is
-        indeed also empty and simply return
-
-    :param n: node that was expanded, it's children get a prior
-    :param leaf_selection_output: ignored
-    :param leaf_eval_output: the action => probability prior
-    :param info: ignored
-    """
-    if not n.observation_nodes:
-        assert not leaf_eval_output
-        return
-
-    assert len(n.observation_nodes) == 1
-
-    observation_node = mitt.one(n.observation_nodes.items())[1]
-    associate_prior_with_nodes(observation_node.action_nodes, leaf_eval_output)
 
 
 class ActionSelection(Protocol):
@@ -1203,11 +1188,12 @@ def create_root_node_with_child_for_all_actions(
     belief: Belief,
     info: Info,
     actions: Iterable[Action],
-    init_stats: Any,
+    init_stats: Callable[[Action], Any],
 ) -> ObservationNode:
     """Creates a tree by initiating the first action nodes
 
-    Implements :class:`TreeConstructor` given ``actions`` and ``init_stats``
+    Implements :class:`TreeConstructor` given ``actions`` and their
+    ``init_stats``
 
     :param belief: ignored
     :param info: ignored
@@ -1218,7 +1204,7 @@ def create_root_node_with_child_for_all_actions(
     root = ObservationNode()
 
     for a in actions:
-        root.add_action_node(a, ActionNode(deepcopy(init_stats), root))
+        root.add_action_node(a, ActionNode(init_stats(a), root))
 
     return root
 
@@ -1407,7 +1393,7 @@ def create_POUCT(
     actions: Sequence[Action],
     sim: Simulator,
     num_sims: int,
-    init_stats: Any = None,
+    init_stats: Optional[Callable[[Action], Any]] = None,
     leaf_eval: Optional[ExpandAndEvaluate] = None,
     ucb_constant: float = 1,
     horizon: int = 100,
@@ -1438,14 +1424,21 @@ def create_POUCT(
     at depth 4, and that the tree will not grow past the ``horizon`` no matter
     the value of ``max_tree_depth``.
 
+    Note::
+
+        ``init_stats`` is a *callable*, you can simply define a function that
+        returns the same statistics (i.e. `{"qval": 0, "n" 0}`), but make sure
+        that is not passed by reference, as then multiple nodes would have the
+        same statistics (and change those over time)
+
     :param actions: all the actions available to the agent
     :param sim: a simulator of the environment
     :param num_sims: number of simulations to run
     :param init_stats: how to initialize node statistics, defaults to None which sets Q and n to 0
-    :param leaf_eval: the evaluation of leaves, defaults to ``None``, which assumes a random rollout
+    :param leaf_eval: the evaluation of leaves, defaults to ``None``, which assumes a random expand_and_rollout
     :param ucb_constant: exploration constant used in UCB, defaults to 1
     :param horizon: horizon of the problem (number of time steps), defaults to 100
-    :param rollout_depth: the depth a rollout will go up to, defaults to 100
+    :param rollout_depth: the depth a expand_and_rollout will go up to, defaults to 100
     :param max_tree_depth: the depth the tree is allowed to grow to, defaults to 100
     :param discount_factor: the discount factor of the environment, defaults to 0.95
     :param progress_bar: flag to output a progress bar, defaults to False
@@ -1455,32 +1448,9 @@ def create_POUCT(
 
     max_tree_depth = min(max_tree_depth, horizon)
     action_list = list(actions)
-    expansion_strategy = partial(expand_node_with_all_actions, action_list, init_stats)
-
-    # defaults
-    if not leaf_eval:
-        assert rollout_depth > 0
-
-        def leaf_eval(leaf: ActionNode, s: State, o: Observation, t: bool, info: Info):
-            """Evaluates a leaf (:class:`ExpandAndEvaluate`) through random rollout"""
-            depth = min(rollout_depth, horizon - info["leaf_depth"])
-            policy = partial(random_policy, action_list)
-
-            return rollout(
-                policy,
-                sim,
-                depth,
-                discount_factor,
-                expansion_strategy,
-                leaf,
-                s,
-                o,
-                t,
-                info,
-            )
 
     if not init_stats:
-        init_stats = {"qval": 0, "n": 0}
+        init_stats = lambda _: {"qval": 0, "n": 0}
 
     # stop condition: keep track of `pbar` if `progress_bar` is set
     pbar = no_stop
@@ -1496,6 +1466,30 @@ def create_POUCT(
         actions=action_list,
         init_stats=init_stats,
     )
+    expansion_strategy = partial(expand_node_with_all_actions, action_list, init_stats)
+
+    # defaults
+    if not leaf_eval:
+        assert rollout_depth > 0
+
+        def leaf_eval(leaf: ActionNode, s: State, o: Observation, t: bool, info: Info):
+            """Evaluates a leaf (:class:`ExpandAndEvaluate`) through random expand_and_rollout"""
+            depth = min(rollout_depth, horizon - info["leaf_depth"])
+            policy = partial(random_policy, action_list)
+
+            return expand_and_rollout(
+                expansion_strategy,
+                policy,
+                sim,
+                depth,
+                discount_factor,
+                leaf,
+                s,
+                o,
+                t,
+                info,
+            )
+
     node_scoring_method = partial(ucb_scores, ucb_constant=ucb_constant)
     leaf_select = partial(
         select_leaf_by_max_scores, sim, node_scoring_method, max_tree_depth
@@ -1537,7 +1531,7 @@ def create_POUCT_with_state_models(
     :param actions: all the actions available to the agent
     :param sim: a simulator of the environment
     :param num_sims: number of simulations to run
-    :param state_based_model: the evaluation of leaves, defaults to ``None``, which assumes a random rollout
+    :param state_based_model: the evaluation of leaves, defaults to ``None``, which assumes a random expand_and_rollout
     :param ucb_constant: exploration constant used in UCB, defaults to 1
     :param max_tree_depth: the depth the tree is allowed to grow to, defaults to 100
     :param discount_factor: the discount factor of the environment, defaults to 0.95
@@ -1546,7 +1540,6 @@ def create_POUCT_with_state_models(
     """
     assert num_sims > 0 and max_tree_depth > 0
 
-    init_stats = {"qval": 0, "n": 0}
     action_list = list(actions)
 
     # stop condition: keep track of `pbar` if `progress_bar` is set
@@ -1563,26 +1556,26 @@ def create_POUCT_with_state_models(
 
         Stores *average* prior (wrt belief) into root action nodes
         """
-        root = create_root_node_with_child_for_all_actions(
-            belief, info, action_list, init_stats
-        )
 
         # approximate the beleif prior by average over (100) states
         priors = [state_based_model(belief())[1] for _ in range(100)]
         avg_prior = {a: np.mean([p[a] for p in priors]) for a in actions}
 
-        associate_prior_with_nodes(root.action_nodes, avg_prior)
+        init_stats = lambda a: {"qval": 0, "n": 1, "prior": avg_prior[a]}
+
+        root = create_root_node_with_child_for_all_actions(
+            belief, info, action_list, init_stats
+        )
 
         return root
 
     node_scoring_method = partial(ucb_with_prior_scores, ucb_constant=ucb_constant)
+
     leaf_select = partial(
         select_leaf_by_max_scores, sim, node_scoring_method, max_tree_depth
     )
     leaf_eval = partial(state_based_model_evaluation, model=state_based_model)
-
     backprop = partial(backprop_running_q, discount_factor)
-
     action_select = max_q_action_selector
 
     return partial(

@@ -114,7 +114,7 @@ effective implementations can be domain-specific policies or evaluation models
 
 Provided implementations:
 
-    - :func:`~online_pomdp_planning.mcts.rollout`
+    - :func:`~online_pomdp_planning.mcts.expand_and_rollout`
     - :func:`~online_pomdp_planning.mcts.state_based_model_evaluation`
 
 It is common for the expansion and evaluation to be fairly separate concerns,
@@ -147,7 +147,6 @@ return.
 Provided implementations:
 
     - :func:`~online_pomdp_planning.mcts.backprop_running_q`
-    - :func:`~online_pomdp_planning.mcts.associate_prior_with_nodes`
 
 Action selector
 ---------------
