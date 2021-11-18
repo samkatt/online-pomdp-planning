@@ -371,6 +371,19 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
         assert n.stats == init_stats[a]
 
 
+    # test that calling again will results in a no-operation
+    expand_node_with_all_actions(actions, lambda a: init_stats[a], o, node, info)
+
+    assert info["mcts_num_action_nodes"] == 1
+    assert expansion.parent is node
+    assert node.observation_node(o) is expansion
+    assert len(expansion.action_nodes) == len(actions)
+
+    for a, n in expansion.action_nodes.items():
+        assert len(n.observation_nodes) == 0
+        assert n.parent == expansion
+        assert n.stats == init_stats[a]
+
 def fake_muzero_recurrance_inference(
     state, action, value, reward, policy, latent_state
 ):

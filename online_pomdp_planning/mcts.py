@@ -683,7 +683,7 @@ def expand_node_with_all_actions(
     stats, this implements :class:`Expansion`
 
     NOTE: ``action_node`` must not have a child node associated with ``o`` or
-    this will result in an ``AssertionError``
+    this will result in a no-operation.
 
     NOTE: requires ``info`` to contain entry for "mcts_num_action_nodes"
 
@@ -694,7 +694,8 @@ def expand_node_with_all_actions(
     :param info: run time information -- requires "mcts_num_action_nodes"
     :return: modifies tree
     """
-    assert o not in action_node.observation_nodes
+    if o in action_node.observation_nodes:
+        return
 
     if len(action_node.observation_nodes) == 0:
         # first time this action node was expanded,
