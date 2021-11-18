@@ -31,7 +31,7 @@ from online_pomdp_planning.types import (
     Simulator,
     State,
 )
-from online_pomdp_planning.utils import MovingStatistic, normalize_float
+from online_pomdp_planning.utils import MovingStatistic
 
 Stats = Dict[str, Any]
 """Alias type for statistics: a mapping from some description to anything"""
@@ -455,9 +455,7 @@ def muzero_ucb_scores(
     # q: assigning `0` to unvisited actions (not "inf")
     q_values = {a: stat["qval"] if stat["n"] != 0 else 0 for a, stat in stats.items()}
     if q_stat.min < q_stat.max:
-        q_values = {
-            a: normalize_float(q, q_stat.min, q_stat.max) for a, q in q_values.items()
-        }
+        q_values = {a: q_stat.normalize(q) for a, q in q_values.items()}
 
     # p
     priors = {
