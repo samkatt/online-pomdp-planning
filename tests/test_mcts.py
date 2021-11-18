@@ -12,6 +12,8 @@ from online_pomdp_planning.mcts import (
     DeterministicNode,
     MuzeroInferenceOutput,
     ObservationNode,
+    alphazero_ucb,
+    alphazero_ucb_scores,
     backprop_running_q,
     create_muzero_root,
     create_root_node_with_child_for_all_actions,
@@ -437,7 +439,6 @@ def test_muzero_expand_node():
     "q,n,n_total,ucb_constant,expected_raise",
     [
         (123, 0, 234, 452, False),
-        (0, 0, -234, False, True),
         (0, -1, 10, False, True),
         (0, 1, 1, 0, False),
         (-5.2, 1, 1, 1, False),
@@ -447,9 +448,9 @@ def test_ucb_raises(q, n, n_total, ucb_constant, expected_raise):
     """Tests that :func:`~online_pomdp_planning.mcts.ucb` raises on invalid input"""
     if expected_raise:
         with pytest.raises(AssertionError):
-            ucb(q, n, n_total, ucb_constant)
+            ucb(q, n, log(n_total), ucb_constant)
     else:
-        ucb(q, n, n_total, ucb_constant)
+        ucb(q, n, log(n_total), ucb_constant)
 
 
 @pytest.mark.parametrize(
@@ -465,7 +466,7 @@ def test_ucb_raises(q, n, n_total, ucb_constant, expected_raise):
 )
 def test_ucb(q, n, n_total, ucb_constant, expectation):
     """Tests :func:`~online_pomdp_planning.mcts.ucb`"""
-    assert ucb(q, n, n_total, ucb_constant) == expectation
+    assert ucb(q, n, log(n_total), ucb_constant) == expectation
 
 
 def test_ucb_scores():
@@ -481,6 +482,102 @@ def test_ucb_scores():
     assert {"a1", True, 10} == set(action_scores.keys())
     assert action_scores[10] == float("inf")
     assert action_scores[True] == 1 + 50.3 * sqrt(log(10) / 1)
+
+
+@pytest.mark.parametrize(
+    "q,n,prior,c,tot,res",
+    [
+        (  # base case
+            0,
+            0,
+            1.0,
+            1.0,
+            1,
+            1,
+        ),
+        (  # Q value
+            0.4,
+            0,
+            1.0,
+            1.0,
+            1,
+            1.4,
+        ),
+        (  # c
+            0,
+            0,
+            1.0,
+            1.2,
+            1,
+            1.2,
+        ),
+        (  # prior
+            0,
+            0,
+            0.8,
+            1.0,
+            1,
+            0.8,
+        ),
+        (  # tot
+            0,
+            0,
+            1.0,
+            1.0,
+            10,
+            sqrt(10),
+        ),
+        (  # random
+            0.68,
+            23,
+            0.2,
+            1.25,
+            89,
+            0.7782706367922563,
+        ),
+    ],
+)
+def test_alphazero_ucb(q, n, prior, c, tot, res):
+    """tests `func:alphazero_score`"""
+
+    # basic tests that should always return 0 or ``q``
+    assert alphazero_ucb(0, n, 0, sqrt(tot), c) == 0
+    assert alphazero_ucb(0, n, prior, sqrt(tot), 0) == 0
+    assert alphazero_ucb(q, n, 0, sqrt(tot), c) == q
+    assert alphazero_ucb(q, n, prior, sqrt(tot), 0) == q
+
+    assert pytest.approx(alphazero_ucb(q, n, prior, sqrt(tot), c)) == res
+
+
+def test_alphazero_ucb_scores():
+    """tests :func:`alphazero_ucb_scores`"""
+    stats = {
+        "a1": {"qval": 0, "n": 0, "prior": 0.7},
+        True: {"qval": 0, "n": 0, "prior": 0.1},
+        False: {"qval": 0, "n": 2, "prior": 0.1},
+        (0, "a4"): {"qval": 2.3, "n": 2, "prior": 0.1},
+    }
+
+    info = {"q_statistic": MovingStatistic()}
+
+    scores = alphazero_ucb_scores(stats, info, 0.5)
+
+    assert len(scores) == len(stats)
+    assert pytest.approx(scores["a1"]) == 0.7 * 2 * 0.5
+    assert pytest.approx(scores[True]) == 0.1 * 2 * 0.5
+    assert pytest.approx(scores[False]) == 0.1 * (2 / 3) * 0.5
+    assert pytest.approx(scores[(0, "a4")]) == 2.3 + 0.5 * (2 / 3) * 0.1
+
+    info["q_statistic"].add(0)
+    info["q_statistic"].add(2.3)
+
+    scores = alphazero_ucb_scores(stats, info, 0.5)
+
+    assert len(scores) == len(stats)
+    assert pytest.approx(scores["a1"]) == 0.7 * 2 * 0.5
+    assert pytest.approx(scores[True]) == 0.1 * 2 * 0.5
+    assert pytest.approx(scores[False]) == 0.1 * (2 / 3) * 0.5
+    assert pytest.approx(scores[(0, "a4")]) == 1.0 + 0.5 * (2 / 3) * 0.1
 
 
 @pytest.mark.parametrize(

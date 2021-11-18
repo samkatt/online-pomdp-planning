@@ -344,24 +344,53 @@ ActionScoringMethod = Callable[[ActionStats, Info], Dict[Action, float]]
 def ucb(
     q: float,
     n: int,
-    n_total: int,
+    log_n_total: float,
     ucb_constant: float,
 ) -> float:
     """Returns the upper confidence bound of Q
 
-    UCB is `q + ucb_constant * sqrt(log(n_total) / n)`.
+    UCB is `q + ucb_constant * sqrt(log(log_n_total) / n)`.
+
+    Assumes log is already applied to ``log_n_total`` for computational
+    efficiency assumes will be called more often for different ``q``/``n``
+    values
 
     :param q: the q-value
     :param n: the number of times this action has been chosen
-    :param n_total: the total number of times any action has been chosen
+    :param log_n_total: log(the total number of times any action has been chosen)
     :param ucb_constant: the exploration constant
     :return: UCB of ``q``
     """
-    assert n >= 0 and n_total >= 0 and ucb_constant >= 0
+    assert n >= 0 and log_n_total >= 0 and ucb_constant >= 0
     if n == 0:
         return float("inf")
 
-    return q + ucb_constant * sqrt(log(n_total) / n)
+    return q + ucb_constant * sqrt(log_n_total / n)
+
+
+def alphazero_ucb(
+    q: float,
+    n: int,
+    prior: float,
+    n_total_sqrt: float,
+    ucb_constant: float,
+) -> float:
+    """Returns the upper confidence bound of Q according to AlphaZero
+
+    Should be `q + ucb_constant * prior * sqrt(n_total_sqrt / (1+n))`.
+
+    For computational efficiency we assume ``n_total_sqrt`` has already ``sqrt``
+    applied.
+
+    :param q: the (normalized) q-value
+    :param n: the number of times this action has been chosen
+    :param prior: prior policy probability [0,1]
+    :param n_total_sqrt: sqrt(the total number of times any action has been chosen)
+    :param ucb_constant: the exploration constant
+    :return: AlphaZero's UCB of ``q``
+    """
+    assert n >= 0 and n_total_sqrt >= 0 and ucb_constant >= 0 and 0 <= prior <= 1
+    return q + ucb_constant * prior_term_in_ucb(prior, n, n_total_sqrt)
 
 
 def ucb_scores(
@@ -382,14 +411,22 @@ def ucb_scores(
     :param ucb_constant: the upper-confidence bound constant
     :return: an action => score mapping, here the upper confidence bound on the q values
     """
+
     total_visits = sum(s["n"] for s in stats.values())
 
+    # special case where no action has ever been taken
+    if total_visits == 0:
+        return {a: float("inf") for a in stats}
+
+    log_total_visits = log(total_visits)
+
     return {
-        a: ucb(s["qval"], s["n"], total_visits, ucb_constant) for a, s in stats.items()
+        a: ucb(s["qval"], s["n"], log_total_visits, ucb_constant)
+        for a, s in stats.items()
     }
 
 
-def prior_term_in_ucb(p: float, n: int, n_total: int) -> float:
+def prior_term_in_ucb(p: float, n: int, n_total_sqrt: float) -> float:
     """Computes the node's prior term in muzero's UCB scoring
 
     The contribution of the node specific prior in
@@ -397,20 +434,23 @@ def prior_term_in_ucb(p: float, n: int, n_total: int) -> float:
 
         p * (sqrt(n_total) / (n + 1))
 
+    Here we assume for computationally efficiency that ``n_total_sqrt``, as the
+    name implies, is already square-rooted
+
     XXX: *not* tested since I really have no idea, other than copying the
     formula from the paper or pseudocode, what outputs to expect for certain
     inputs.
 
     :param p: the prior probability given by some policy
     :param n: number of times this action has been chosen
-    :param n_total: number of times *an action* has been chosen
+    :param n_total_sqrt: sqrt(number of times *an action* has been chosen)
     :return: a prior score [0,1]
     """
-    return p * (sqrt(n_total) / (1 + n))
+    return p * (n_total_sqrt / (1 + n))
 
 
 def muzero_ucb_scores(
-    stats: ActionStats, info: Info, c1: float, c2: Optional[float]
+    stats: ActionStats, info: Info, c1: float, c2: float
 ) -> Dict[Action, float]:
     """The UCB scoring method used my muzero
 
@@ -425,11 +465,8 @@ def muzero_ucb_scores(
     The second (prior & exploration) term is implemented in
     :func:`prior_term_in_ucb`.
 
-    Assumes ``stats`` contains "qval" and "n" for every action and that
-    ``info`` contains "q_statistic".
-
-    When ``c2`` is ``None``, this reduces to the scores used by previous
-    algorithms such as Alpha-zero by settings the baseterm to ``c1``.
+    Assumes ``stats`` contains "qval", "n", and "prior" for every action and
+    that ``info`` contains "q_statistic".
 
     Given ``c1`` and ``c2``, implements the :class:`ActionScoringMethod`.
 
@@ -441,25 +478,27 @@ def muzero_ucb_scores(
     :param stats: action => stats mapping
     :param info: contains "q_staticstic"
     :param c1: first exploration constant
-    :param c2: second exploration constant, if 0 then the last term vanishes
+    :param c2: second exploration constant
     :return: action => float scores
     """
+    assert c1 > 0 and c2 > 0
     q_stat = info["q_statistic"]
 
     # pre-computed for all actions
     total_visits = sum(s["n"] for s in stats.values())
 
     # base term
-    base_term = c1 + log((total_visits + c2 + 1) / c2) if c2 else c1
+    base_term = c1 + log((total_visits + c2 + 1) / c2)
 
     # q: assigning `0` to unvisited actions (not "inf")
     q_values = {a: stat["qval"] if stat["n"] != 0 else 0 for a, stat in stats.items()}
     if q_stat.min < q_stat.max:
         q_values = {a: q_stat.normalize(q) for a, q in q_values.items()}
 
-    # p
+    total_visits_sqrt = sqrt(total_visits)  # pre-computation
+
     priors = {
-        a: prior_term_in_ucb(stat["prior"], stat["n"], total_visits)
+        a: prior_term_in_ucb(stat["prior"], stat["n"], total_visits_sqrt)
         for a, stat in stats.items()
     }
 
@@ -467,7 +506,7 @@ def muzero_ucb_scores(
     return {a: q_values[a] + priors[a] * base_term for a in stats}
 
 
-def ucb_with_prior_scores(
+def alphazero_ucb_scores(
     stats: ActionStats,
     info: Info,
     ucb_constant: float,
@@ -483,22 +522,38 @@ def ucb_with_prior_scores(
     the child node, and `norm(q)` is the normalized q value of the node.
 
     The second (prior & exploration) term is implemented in
-    :func:`prior_term_in_ucb`.
+    :func:`alphazero_ucb`.
 
-    Assumes ``stats`` contains "qval" and "n" for every action and that
-    ``info`` contains "q_statistic".
+    Assumes ``stats`` contains "qval", "prior", and "n" for every action and
+    that ``info`` contains "q_statistic".
 
     Given ``ucb_constant``, implements the :class:`ActionScoringMethod`.
 
-    Implementd by calling :func:`muzero_ucb_scores` with ``c2`` as
-    ``None``.
+    Taken from AlphaZero::
+
+        Silver, David, et al. "Mastering the game of go without human
+        knowledge." nature 550.7676 (2017): 354-359.
 
     :param stats: action => stats mapping
     :param info: contains "q_staticstic"
     :param ucb_constant: first exploration constant
     :return: action => float scores
     """
-    return muzero_ucb_scores(stats, info, ucb_constant, None)
+    # unpacking some stuff
+    q_stat = info["q_statistic"]
+    total_visits_sqrt = sqrt(sum(s["n"] for s in stats.values()))
+
+    if q_stat.min < q_stat.max:
+        q_values = {a: q_stat.normalize(s["qval"]) for a, s in stats.items()}
+    else:
+        q_values = {a: s["qval"] for a, s in stats.items()}
+
+    return {
+        a: alphazero_ucb(
+            q_values[a], s["n"], s["prior"], total_visits_sqrt, ucb_constant
+        )
+        for a, s in stats.items()
+    }
 
 
 def select_action(
@@ -1565,7 +1620,7 @@ def create_POUCT_with_state_models(
 
         return root
 
-    node_scoring_method = partial(ucb_with_prior_scores, ucb_constant=ucb_constant)
+    node_scoring_method = partial(alphazero_ucb_scores, ucb_constant=ucb_constant)
 
     leaf_select = partial(
         select_leaf_by_max_scores, sim, node_scoring_method, max_tree_depth
