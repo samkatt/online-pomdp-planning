@@ -1561,6 +1561,8 @@ def create_POUCT_with_state_models(
             belief, info, action_list, init_stats
         )
 
+        info["prior_belief_policy"] = avg_prior
+
         return root
 
     node_scoring_method = partial(ucb_with_prior_scores, ucb_constant=ucb_constant)
