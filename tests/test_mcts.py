@@ -370,7 +370,6 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
         assert n.parent == expansion
         assert n.stats == init_stats[a]
 
-
     # test that calling again will results in a no-operation
     expand_node_with_all_actions(actions, lambda a: init_stats[a], o, node, info)
 
@@ -383,6 +382,7 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
         assert len(n.observation_nodes) == 0
         assert n.parent == expansion
         assert n.stats == init_stats[a]
+
 
 def fake_muzero_recurrance_inference(
     state, action, value, reward, policy, latent_state
@@ -712,23 +712,34 @@ def test_select_deterministc_leaf_by_max_scores():
 
 def test_backprop_running_q_assertion():
     """Tests that :func:`~online_pomdp_planning.mcts.backprop_running_q` raises bad discount"""
-    some_obs_node = ObservationNode()
+    root = ObservationNode()
+    leaf = ActionNode({"qval": 0.3, "n": 1}, root)
+
     with pytest.raises(AssertionError):
         backprop_running_q(
             -1,
-            ActionNode("gargabe", some_obs_node),
-            [],
+            leaf,
+            [1.0],
             0,
             {"q_statistic": MovingStatistic()},
         )
     with pytest.raises(AssertionError):
         backprop_running_q(
             1.1,
-            ActionNode("gargabe", some_obs_node),
-            [],
+            leaf,
+            [1.0],
             0,
             {"q_statistic": MovingStatistic()},
         )
+
+    # ``None`` is acceptable leaf evaluation
+    backprop_running_q(
+        0.9,
+        leaf,
+        [1.0],
+        None,
+        {"q_statistic": MovingStatistic()},
+    )
 
 
 @pytest.mark.parametrize(
@@ -810,6 +821,9 @@ def test_deterministic_qval_backpropagation():
     # return = 9 * .9 + 0.5 = ..., ... / 1
     assert root.stats["qval"] == 9 * 0.9 + 0.5
 
+    # Quick test to see that ``None`` is acceptable as leaf eval
+    deterministic_qval_backpropagation(0.9, second_leaf, None, None, info)
+
 
 def test_rollout():
     """Tests :func:`~online_pomdp_planning.mcts.rollout`"""
@@ -860,20 +874,8 @@ def test_expand_and_rollout():
         expansion_results["leaf"] = a
         expansion_results["info"] = info
 
-    # test terminal flag will not do anything
     ret = expand_and_rollout(
-        save_expansion, pol, sim, depth, discount_factor, "leaf!", state, obs, True, {}
-    )
-
-    assert "leaf" not in expansion_results
-    assert "obs" not in expansion_results
-    assert "info" not in expansion_results
-
-    assert ret == 0.0
-
-    # typical execution
-    ret = expand_and_rollout(
-        save_expansion, pol, sim, depth, discount_factor, "leaf!", state, obs, False, {}
+        save_expansion, pol, sim, depth, discount_factor, "leaf!", state, obs, {}
     )
 
     assert expansion_results["leaf"] == "leaf!"

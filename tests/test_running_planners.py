@@ -98,7 +98,7 @@ def test_pouct():
         Tiger.sim,
         16384,
         ucb_constant=100,
-        leaf_eval=lambda leaf, s, o, t, info: 0,
+        leaf_eval=lambda leaf, s, o, info: 0,
     )
 
     action, info = planner(tiger_right_belief)
@@ -132,7 +132,7 @@ def test_pouct_with_prior():
         Tiger.sim,
         16384,
         ucb_constant=ucb_constant,
-        leaf_eval=lambda leaf, s, o, t, info: 0,
+        leaf_eval=lambda leaf, s, o, info: 0,
     )
 
     action, info = planner(tiger_right_belief)

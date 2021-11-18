@@ -753,15 +753,12 @@ class ExpandAndEvaluate(Protocol):
     .. automethod:: __call__
     """
 
-    def __call__(
-        self, leaf: ActionNode, s: State, o: Observation, t: bool, info: Info
-    ) -> Any:
+    def __call__(self, leaf: ActionNode, s: State, o: Observation, info: Info) -> Any:
         """Evaluates a leaf node
 
         :param leaf: leaf to expand and evaluate
         :param s: state to evaluate
         :param o: observation to evaluate
-        :param t: whether the episode terminated
         :param info: run time information
         :return: evaluation, can be whatever, given to :class:`BackPropagation`
         """
@@ -801,7 +798,6 @@ def expand_and_rollout(
     leaf: ActionNode,
     s: State,
     o: Observation,
-    t: bool,
     info: Info,
 ) -> float:
     """Expands ``leaf`` according to ``expansion_strategy`` and evaluate with ``policy``
@@ -833,7 +829,7 @@ def expand_and_rollout(
     assert 0 <= discount_factor <= 1
     assert depth >= 0, "prevent never ending loop"
 
-    if t or depth == 0:
+    if depth == 0:
         return 0.0
 
     expansion_strategy(o, leaf, info)
@@ -884,7 +880,6 @@ def state_based_model_evaluation(
     leaf: ActionNode,
     s: State,
     o: Observation,
-    t: bool,
     info: Info,
     model: Callable[[State], Tuple[float, Mapping[Action, float]]],
 ) -> float:
@@ -909,9 +904,6 @@ def state_based_model_evaluation(
     :param model: used to evaluate ``s`` (value *and* prior)
     :return: the value as predicted by ``model``
     """
-    if t:
-        return 0
-
     v, prior = model(s)
 
     init_stats = lambda a: {"qval": 0, "n": 1, "prior": prior[a]}
@@ -930,14 +922,14 @@ class BackPropagation(Protocol):
         self,
         n: ActionNode,
         leaf_selection_output: Any,
-        leaf_eval_output: Any,
+        leaf_eval_output: Optional[Any],
         info: Info,
     ) -> None:
         """Updates the nodes visited during selection
 
         :param n: The leaf node that was expanded
         :param leaf_selection_output: The output of the selection method
-        :param leaf_eval_output: The output of the evaluation method
+        :param leaf_eval_output: The output of the evaluation method, if at all
         :param info: run time information
         :return: has only side effects
         """
@@ -970,7 +962,7 @@ def backprop_running_q(
     discount_factor: float,
     leaf: ActionNode,
     leaf_selection_output: List[float],
-    leaf_evaluation: float,
+    leaf_evaluation: Optional[float],
     info: Info,
 ) -> None:
     """Updates running Q average of visited nodes
@@ -990,13 +982,13 @@ def backprop_running_q(
     :param discount_factor: 'gamma' of the POMDP environment [0, 1]
     :param leaf: leaf node
     :param leaf_selection_output: list of rewards from tree policy
-    :param leaf_evaluation: return estimate
+    :param leaf_evaluation: return estimate, assumed 0 if ``None``
     :param info: run time information (ignored)
     :return: has only side effects
     """
     assert 0 <= discount_factor <= 1
 
-    reverse_return = leaf_evaluation
+    reverse_return = leaf_evaluation if leaf_evaluation else 0
 
     # loop through all rewards in reverse order
     # simultaneously traverse back up the tree through `leaf`
@@ -1027,7 +1019,7 @@ def deterministic_qval_backpropagation(
     discount_factor: float,
     leaf: DeterministicNode,
     leaf_selection_output: Any,
-    leaf_eval_output: float,
+    leaf_eval_output: Optional[float],
     info: Info,
 ) -> None:
     """Backpropagation for deterministic trees (used in muzero)
@@ -1039,13 +1031,13 @@ def deterministic_qval_backpropagation(
     :param discount_factor: discount factor used in computing return
     :param n: the leaf node to start propagating back from
     :param leaf_selection_output: ignored
-    :param leaf_eval_output: expected to be a float (evaluation)
+    :param leaf_eval_output: expected to be a float (evaluation), assumed 0 if ``None``
     :param info: "q_statistic" updated
     :return: none, only side efects in tree
     """
     assert 0 <= discount_factor <= 1
 
-    value = leaf_eval_output
+    value = leaf_eval_output if leaf_eval_output else 0
 
     n: Optional[DeterministicNode] = leaf
 
@@ -1317,7 +1309,11 @@ def mcts(
             state, root_node, info
         )
 
-        evaluation = expand_and_eval(leaf, state, obs, terminal_flag, info)
+        if not terminal_flag:
+            evaluation = expand_and_eval(leaf, state, obs, info)
+        else:
+            evaluation = None
+
         backprop(leaf, selection_output, evaluation, info)
 
         info["iteration"] += 1
@@ -1471,7 +1467,7 @@ def create_POUCT(
     if not leaf_eval:
         assert rollout_depth > 0
 
-        def leaf_eval(leaf: ActionNode, s: State, o: Observation, t: bool, info: Info):
+        def leaf_eval(leaf: ActionNode, s: State, o: Observation, info: Info):
             """Evaluates a leaf (:class:`ExpandAndEvaluate`) through random expand_and_rollout"""
             depth = min(rollout_depth, horizon - info["leaf_depth"])
             policy = partial(random_policy, action_list)
@@ -1485,7 +1481,6 @@ def create_POUCT(
                 leaf,
                 s,
                 o,
-                t,
                 info,
             )
 
