@@ -24,6 +24,14 @@ class MovingStatistic:
         self.max = max(self.max, val)
         self.min = min(self.min, val)
 
+    def normalize(self, val) -> float:
+        """Normalizes ``val`` according to ``self`` statistics
+
+        :param val: a value to be normalized
+        :return: normalized ``value`` (between 0 and 1, if statistics are good)
+        """
+        return normalize_float(val, self.min, self.max)
+
     def __repr__(self) -> str:
         return f"MovingStatistic(mean={self.mean}, min/max={self.min}/{self.max}, n={self.num})"
 
