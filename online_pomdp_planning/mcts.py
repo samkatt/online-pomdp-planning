@@ -4,12 +4,12 @@ from __future__ import annotations
 import random
 from functools import partial
 from math import isclose, log, sqrt
+from operator import xor
 from timeit import default_timer as timer
 from typing import (
     Any,
     Callable,
     Dict,
-    Iterable,
     List,
     Mapping,
     NamedTuple,
@@ -24,7 +24,9 @@ from typing_extensions import Protocol
 
 from online_pomdp_planning.types import (
     Action,
+    ActionObservation,
     Belief,
+    History,
     Info,
     Observation,
     Planner,
@@ -33,9 +35,9 @@ from online_pomdp_planning.types import (
 )
 from online_pomdp_planning.utils import MovingStatistic
 
-Stats = Dict[str, Any]
+Stats = Mapping[str, Any]
 """Alias type for statistics: a mapping from some description to anything"""
-ActionStats = Dict[Action, Stats]
+ActionStats = Mapping[Action, Stats]
 """Alias type for action statistics: a mapping from actions to :class:`Stats`"""
 
 
@@ -67,33 +69,33 @@ class ActionNode:
 
     def __init__(
         self,
+        action: Action,
         initial_statistics: Any,
         parent: ObservationNode,
     ):
         """Initializes the action node with given statistics
 
+        :param action: the action associated with this node
         :param initial_statistics: anything you would like to store
         :param parent: the parent node in the tree
         """
+        self.action = action
         self.stats = initial_statistics
         self.parent = parent
         self.observation_nodes: Dict[Observation, ObservationNode] = {}
 
-    def add_observation_node(
-        self, observation: Observation, observation_node: ObservationNode
-    ):
+    def add_observation_node(self, observation_node: ObservationNode):
         """Adds a node to the children of `self`
 
         Raises ``AssertionError`` if:
             - the parent of the added node is not self
             - ``observation`` is not already associated with a child node
 
-        :param observation: the observation associated with child
         :param observation_node: the new child node
         """
-        assert observation not in self.observation_nodes
+        assert observation_node.observation not in self.observation_nodes
         assert observation_node.parent == self
-        self.observation_nodes[observation] = observation_node
+        self.observation_nodes[observation_node.observation] = observation_node
 
     def observation_node(self, observation: Observation) -> ObservationNode:
         """The child-node associated with given observation ``o``
@@ -107,7 +109,7 @@ class ActionNode:
 
     def __repr__(self) -> str:
         """Pretty print action nodes"""
-        return f"ActionNode({self.stats}, {self.parent})"
+        return f"ActionNode({self.action}, {self.stats}, {self.parent})"
 
 
 class ObservationNode:
@@ -118,11 +120,26 @@ class ObservationNode:
     is the root node. This node maps actions to children nodes.
     """
 
-    def __init__(self, parent: Optional[ActionNode] = None):
+    def __init__(
+        self,
+        observation: Optional[Observation] = None,
+        parent: Optional[ActionNode] = None,
+    ):
         """Initiates an observation node with given parent
 
+        Either *no argument* should be given, or _both_, will otherwise throw
+        and assertion error.
+
+        If None are given, it must be the root of a tree.
+
+        :param observation: observation associated with this node
         :param parent: if no parent is given, this must be the root node
         """
+        # ugly because SE is hard, but check
+        # to make sure either none or both arguments are given
+        assert not xor(observation is None, parent is None)
+
+        self.observation = observation
         self.parent = parent
         self.action_nodes: Dict[Action, ActionNode] = {}
 
@@ -134,20 +151,18 @@ class ObservationNode:
         """
         return {a: n.stats for a, n in self.action_nodes.items()}
 
-    def add_action_node(self, action: Action, node: ActionNode):
+    def add_action_node(self, node: ActionNode):
         """Adds a ``action`` -> ``node`` mapping to children
 
         Raises ``AssertionError`` if:
             - the parent of the added node is not `self`
             - ``action`` is not already associated with a child node
 
-
-        :param action: action associated with new child
         :param node: child node
         """
-        assert action not in self.action_nodes
+        assert node.action not in self.action_nodes
         assert node.parent == self
-        self.action_nodes[action] = node
+        self.action_nodes[node.action] = node
 
     def action_node(self, action: Action) -> ActionNode:
         """Get child node associated with ``action``
@@ -159,9 +174,29 @@ class ObservationNode:
         """
         return self.action_nodes[action]
 
+    def history(self) -> History:
+        """Returns the history from root to `self`
+
+        Implemented recursively: returns empty list if root, otherwise parent's
+        history + self
+
+        :return: list of action-observation tuples (first element is for t = 0)
+        """
+        if self.observation is None:
+            # self is root
+            return []
+
+        assert self.parent is not None
+
+        # recurrent call on parent,
+        # and append then current observation and parent's action
+        return self.parent.parent.history() + [
+            ActionObservation(self.parent.action, self.observation)
+        ]
+
     def __repr__(self) -> str:
         """Pretty print observation nodes"""
-        return f"ObservationNode({self.parent})"
+        return f"ObservationNode({self.observation}, {self.parent})"
 
 
 class DeterministicNode:
@@ -224,6 +259,7 @@ class StopCondition(Protocol):
         :param info: run time information
         :return: ``True`` if determined stop condition is met
         """
+        raise NotImplementedError()
 
 
 def no_stop(info: Info) -> bool:
@@ -318,6 +354,7 @@ class LeafSelection(Protocol):
         :param info: run time information
         :return: leaf node, state and obs, terminal flag and input to :class:`BackPropagation`
         """
+        raise NotImplementedError()
 
 
 class DeterministicLeafSelection(Protocol):
@@ -335,6 +372,7 @@ class DeterministicLeafSelection(Protocol):
         :param info: run time information
         :return: leaf node and input to :class:`DeterministicBackPropagation`
         """
+        raise NotImplementedError()
 
 
 ActionScoringMethod = Callable[[ActionStats, Info], Dict[Action, float]]
@@ -697,11 +735,11 @@ class Expansion(Protocol):
     .. automethod:: __call__
     """
 
-    def __call__(self, o: Observation, a: ActionNode, info: Info):
-        """Expands a leaf node
+    def __call__(self, o: Observation, action_node: ActionNode, info: Info):
+        """Expands action_node leaf node
 
         :param o: observation that resulted in leaf
-        :param a: action that resulted in leaf
+        :param action_node: action that resulted in leaf
         :param info: run time information
         :return: nothing, modifies the tree
         """
@@ -723,27 +761,24 @@ class DeterministicNodeExpansion(Protocol):
 
 
 def expand_node_with_all_actions(
-    actions: Iterable[Action],
-    init_stats: Callable[[Action], Any],
+    action_stats: ActionStats,
     o: Observation,
     action_node: ActionNode,
     info: Info,
 ):
-    """Adds an observation node to the tree with a child for each action
+    """Adds an observation node to the tree with action_node child for each action
 
     Expands ``action_node`` with new :class:`ObservationNode` with action
     child for each :class:`~online_pomdp_planning.types.Action`
 
-    When provided with the available actions and their respective initial
-    stats, this implements :class:`Expansion`
+    When provided with the  initial stats, this implements :class:`Expansion`
 
-    NOTE: ``action_node`` must not have a child node associated with ``o`` or
-    this will result in a no-operation.
+    NOTE: ``action_node`` must not have action_node child node associated with
+    ``o`` or this will result in action_node no-operation.
 
     NOTE: requires ``info`` to contain entry for "mcts_num_action_nodes"
 
-    :param actions: the available actions
-    :param init_stats: the initial statistics for each node
+    :param action_stats: the initial statistics for each node
     :param o: the new observation
     :param action_node: the current leaf node
     :param info: run time information -- requires "mcts_num_action_nodes"
@@ -757,12 +792,12 @@ def expand_node_with_all_actions(
         # so now we count it as part of the tree
         info["mcts_num_action_nodes"] += 1
 
-    expansion = ObservationNode(parent=action_node)
+    expansion = ObservationNode(observation=o, parent=action_node)
 
-    for a in actions:
-        expansion.add_action_node(a, ActionNode(init_stats(a), expansion))
+    for a, stats in action_stats.items():
+        expansion.add_action_node(ActionNode(a, stats, expansion))
 
-    action_node.add_observation_node(o, expansion)
+    action_node.add_observation_node(expansion)
 
 
 def muzero_expand_node(
@@ -931,12 +966,15 @@ def rollout(
     return ret
 
 
-def state_based_model_evaluation(
+def expand_and_evaluate_with_model(
     leaf: ActionNode,
     s: State,
     o: Observation,
     info: Info,
-    model: Callable[[State], Tuple[float, Mapping[Action, float]]],
+    model: Callable[
+        [Optional[ActionNode], State, Optional[Observation], Info],
+        Tuple[float, ActionStats],
+    ],
 ) -> float:
     """Evaluates ``leaf`` through ``model`` on ``s`` and stores prior
 
@@ -951,18 +989,21 @@ def state_based_model_evaluation(
 
     XXX: hard-coded initial values and call to expand node down here is ugly
 
+    Inspired from AlphaZero::
+
+        Silver, David, et al. "Mastering the game of go without human
+        knowledge." nature 550.7676 (2017): 354-359.
+
     :param leaf: leaf to expand
     :param s: state to be evaluated by ``model``
-    :param o: ignored
+    :param o: observation to be evaluated (potentially) by ``model``
     :param t: if ``true``, will cause this function to return zeros
-    :param info: ignored
-    :param model: used to evaluate ``s`` (value *and* prior)
+    :param info: provided to ``model``, otherwise ignored
+    :param model: used to evaluate leaf to generate stats and value to return
     :return: the value as predicted by ``model``
     """
-    v, prior = model(s)
-
-    init_stats = lambda a: {"qval": 0, "n": 1, "prior": prior[a]}
-    expand_node_with_all_actions(prior.keys(), init_stats, o, leaf, info)
+    v, stats = model(leaf, s, o, info)
+    expand_node_with_all_actions(stats, o, leaf, info)
 
     return v
 
@@ -1215,6 +1256,7 @@ class TreeConstructor(Protocol):
 
         :return: The root node
         """
+        raise NotImplementedError()
 
 
 class DeterministicTreeConstructor(Protocol):
@@ -1228,29 +1270,27 @@ class DeterministicTreeConstructor(Protocol):
 
         :return: The root node
         """
+        raise NotImplementedError()
 
 
 def create_root_node_with_child_for_all_actions(
     belief: Belief,
     info: Info,
-    actions: Iterable[Action],
-    init_stats: Callable[[Action], Any],
+    action_stats: ActionStats,
 ) -> ObservationNode:
     """Creates a tree by initiating the first action nodes
 
-    Implements :class:`TreeConstructor` given ``actions`` and their
-    ``init_stats``
+    Implements :class:`TreeConstructor` given ``action_stats``
 
     :param belief: ignored
     :param info: ignored
-    :param actions: the actions to initiate nodes for
-    :param init_stats: the initial statistics of those nodes
+    :param action_stats: the initial statistics of those nodes
     :return: the root of the tree
     """
     root = ObservationNode()
 
-    for a in actions:
-        root.add_action_node(a, ActionNode(init_stats(a), root))
+    for a, stats in action_stats.items():
+        root.add_action_node(ActionNode(a, stats, root))
 
     return root
 
@@ -1259,7 +1299,7 @@ def create_muzero_root(
     latent_state: Any,
     info: Info,
     reward: float,
-    prior: Dict[Action, float],
+    prior: Mapping[Action, float],
     noise_dirichlet_alpha: float,
     noise_exploration_fraction: float,
 ) -> DeterministicNode:
@@ -1374,6 +1414,7 @@ def mcts(
         info["iteration"] += 1
 
     info["plan_runtime"] = timer() - t
+    info["tree_root_stats"] = root_node.child_stats
 
     return action_select(root_node.child_stats, info), info
 
@@ -1443,7 +1484,7 @@ def create_POUCT(
     actions: Sequence[Action],
     sim: Simulator,
     num_sims: int,
-    init_stats: Optional[Callable[[Action], Any]] = None,
+    init_stats: Optional[ActionStats] = None,
     leaf_eval: Optional[ExpandAndEvaluate] = None,
     ucb_constant: float = 1,
     horizon: int = 100,
@@ -1474,13 +1515,6 @@ def create_POUCT(
     at depth 4, and that the tree will not grow past the ``horizon`` no matter
     the value of ``max_tree_depth``.
 
-    Note::
-
-        ``init_stats`` is a *callable*, you can simply define a function that
-        returns the same statistics (i.e. `{"qval": 0, "n" 0}`), but make sure
-        that is not passed by reference, as then multiple nodes would have the
-        same statistics (and change those over time)
-
     :param actions: all the actions available to the agent
     :param sim: a simulator of the environment
     :param num_sims: number of simulations to run
@@ -1500,7 +1534,7 @@ def create_POUCT(
     action_list = list(actions)
 
     if not init_stats:
-        init_stats = lambda _: {"qval": 0, "n": 0}
+        init_stats = {a: {"qval": 0, "n": 0} for a in action_list}
 
     # stop condition: keep track of `pbar` if `progress_bar` is set
     pbar = no_stop
@@ -1513,19 +1547,20 @@ def create_POUCT(
 
     tree_constructor = partial(
         create_root_node_with_child_for_all_actions,
-        actions=action_list,
-        init_stats=init_stats,
+        action_stats=init_stats,
     )
-    expansion_strategy = partial(expand_node_with_all_actions, action_list, init_stats)
 
     # defaults
     if not leaf_eval:
         assert rollout_depth > 0
+        expansion_strategy = partial(expand_node_with_all_actions, init_stats)
 
-        def leaf_eval(leaf: ActionNode, s: State, o: Observation, info: Info):
+        def rollout_evaluation(leaf: ActionNode, s: State, o: Observation, info: Info):
             """Evaluates a leaf (:class:`ExpandAndEvaluate`) through random expand_and_rollout"""
             depth = min(rollout_depth, horizon - info["leaf_depth"])
-            policy = partial(random_policy, action_list)
+
+            def policy(s, o):
+                return random_policy(action_list, s, o)
 
             return expand_and_rollout(
                 expansion_strategy,
@@ -1538,6 +1573,8 @@ def create_POUCT(
                 o,
                 info,
             )
+
+        leaf_eval = rollout_evaluation
 
     node_scoring_method = partial(ucb_scores, ucb_constant=ucb_constant)
     leaf_select = partial(
@@ -1557,11 +1594,14 @@ def create_POUCT(
     )
 
 
-def create_POUCT_with_state_models(
+def create_POUCT_with_model(
     actions: Sequence[Action],
     sim: Simulator,
     num_sims: int,
-    state_based_model: Callable[[State], Tuple[float, Mapping[Action, float]]],
+    leaf_eval_model: Callable[
+        [Optional[ActionNode], State, Optional[Observation], Info],
+        Tuple[float, ActionStats],
+    ],
     ucb_constant: float = 1,
     max_tree_depth: int = 100,
     discount_factor: float = 0.95,
@@ -1572,7 +1612,7 @@ def create_POUCT_with_state_models(
     Returns an instance of :func:`mcts` where the components have been
     filled in.
 
-    In particular, it uses the ``state_based_model`` to evaluate *and* get a
+    In particular, it uses the ``leaf_eval_model`` to evaluate *and* get a
     prior whenever a node is expanded. Additionally, at the root creation a
     hundred states will be sampled to generate an (average) prior over the root
     action nodes.
@@ -1580,7 +1620,7 @@ def create_POUCT_with_state_models(
     :param actions: all the actions available to the agent
     :param sim: a simulator of the environment
     :param num_sims: number of simulations to run
-    :param state_based_model: the state-based evaluation model
+    :param leaf_eval_model: the state-based evaluation model
     :param ucb_constant: exploration constant used in UCB, defaults to 1
     :param max_tree_depth: the depth the tree is allowed to grow to, defaults to 100
     :param discount_factor: the discount factor of the environment, defaults to 0.95
@@ -1600,23 +1640,15 @@ def create_POUCT_with_state_models(
     def stop_condition(info: Info) -> bool:
         return real_stop_cond(info) or pbar(info)
 
+    def init_stats(a):
+        return {"qval": 0, "prior": 1.0 / len(action_list), "n": 1}
+
     def tree_constructor(belief: Belief, info: Info) -> ObservationNode:
-        """Custom-made tree concstructor
-
-        Stores *average* prior (wrt belief) into root action nodes
-        """
-
-        # approximate the beleif prior by average over (100) states
-        priors = [state_based_model(belief())[1] for _ in range(100)]
-        avg_prior = {a: np.mean([p[a] for p in priors]) for a in actions}
-
-        init_stats = lambda a: {"qval": 0, "n": 1, "prior": avg_prior[a]}
+        """Custom-made tree constructor"""
 
         root = create_root_node_with_child_for_all_actions(
-            belief, info, action_list, init_stats
+            belief, info, {a: init_stats(a) for a in action_list}
         )
-
-        info["prior_belief_policy"] = avg_prior
 
         return root
 
@@ -1625,7 +1657,7 @@ def create_POUCT_with_state_models(
     leaf_select = partial(
         select_leaf_by_max_scores, sim, node_scoring_method, max_tree_depth
     )
-    leaf_eval = partial(state_based_model_evaluation, model=state_based_model)
+    leaf_eval = partial(expand_and_evaluate_with_model, model=leaf_eval_model)
     backprop = partial(backprop_running_q, discount_factor)
     action_select = max_q_action_selector
 

@@ -1,6 +1,6 @@
 """Defines some types for ease of reading"""
 
-from typing import Any, Dict, Hashable, Tuple
+from typing import Any, Dict, Hashable, List, NamedTuple, Tuple
 
 from typing_extensions import Protocol
 
@@ -10,6 +10,17 @@ Observation = Hashable
 """The abstract type representing observations requires to be hash-able"""
 State = Any
 """The abstract type for a state, no particular protocol is expected"""
+
+
+class ActionObservation(NamedTuple):
+    """Action-Observation tuple"""
+
+    action: Action
+    observation: Observation
+
+
+History = List[ActionObservation]
+"""The abstract type of (observable) history: list of action-observation tuples"""
 
 
 class Simulator(Protocol):
@@ -33,6 +44,7 @@ class Simulator(Protocol):
         Returns:
             Tuple[State, Observation, float, bool]:
         """
+        raise NotImplementedError()
 
 
 class Belief(Protocol):
@@ -65,3 +77,4 @@ class Planner(Protocol):
         :param belief:
         :return: the chosen action and run-time information
         """
+        raise NotImplementedError()

@@ -34,7 +34,7 @@ from online_pomdp_planning.mcts import (
     ucb_scores,
     visit_prob_action_selector,
 )
-from online_pomdp_planning.types import Action
+from online_pomdp_planning.types import Action, Info, Observation
 from online_pomdp_planning.utils import MovingStatistic
 
 
@@ -53,11 +53,13 @@ def test_initiate_info():
 def test_action_constructor():
     """Tests initiation of action nodes"""
     stats = (True, False, 10.0)
+    action = "my action"
     p = ObservationNode()
-    n = ActionNode(stats, p)
+    n = ActionNode(action, stats, p)
 
     assert stats == n.stats
     assert p == n.parent
+    assert action == n.action
 
     some_other_parent = ObservationNode()
     some_other_statistics = (1, 2, 3, 4)
@@ -70,34 +72,51 @@ def test_action_constructor():
 def test_action_node_child(observation):
     """checks getting and setting child nodes"""
     root = ObservationNode()
-    n = ActionNode(initial_statistics=None, parent=root)
+    n = ActionNode(action="action", initial_statistics=None, parent=root)
 
     # if child not in node, do not allow fetching it
     with pytest.raises(KeyError):
         n.observation_node(observation)
 
-    child = ObservationNode(parent=n)
-    n.add_observation_node(observation, child)
+    child = ObservationNode(observation=observation, parent=n)
+    n.add_observation_node(child)
 
-    # cannot modify existing child
+    # cannot add existing child
     with pytest.raises(AssertionError):
-        n.add_observation_node(observation, child)
+        n.add_observation_node(child)
 
     # now child is in node, make sure the correct thing is returned
     assert child == n.observation_node(observation)
 
 
 @pytest.mark.parametrize(
-    "parent", [(None), (ActionNode("garbage statistic", ObservationNode()))]
+    "obs,parent",
+    [
+        (None, None),
+        ("o", ActionNode("garbage action", "garbage statistic", ObservationNode())),
+    ],
 )
-def test_observation_node__constructor(parent):
+def test_observation_node__constructor(obs, parent):
     """Tests initiation of observation nodes"""
-    n = ObservationNode(parent)
-    assert parent == n.parent
+    n = ObservationNode(obs, parent)
 
-    other_node = ActionNode("garbage statistic", ObservationNode())
+    assert parent == n.parent
+    assert n.observation == obs
+
+    other_node = ActionNode("action", "garbage statistic", ObservationNode())
 
     assert other_node != n.parent
+
+    if obs is not None:
+        with pytest.raises(AssertionError):
+            ObservationNode(observation=obs)
+
+    if parent is not None:
+        with pytest.raises(AssertionError):
+            ObservationNode(parent=parent)
+
+    with pytest.raises(AssertionError):
+        ObservationNode("some observation")
 
 
 @pytest.mark.parametrize("action", [((0)), (False), ((0, 1))])
@@ -109,12 +128,12 @@ def test_observation_node_child(action):
     with pytest.raises(KeyError):
         n.action_node(action)
 
-    child = ActionNode("some statistic", parent=n)
-    n.add_action_node(action, child)
+    child = ActionNode(action, "some statistic", parent=n)
+    n.add_action_node(child)
 
-    # cannot modify existing child
+    # cannot add existing child
     with pytest.raises(AssertionError):
-        n.add_action_node(action, child)
+        n.add_action_node(child)
 
     # now child is in node, make sure the correct thing is returned
     assert child == n.action_node(action)
@@ -125,12 +144,12 @@ def test_observation_child_stats():
     node = ObservationNode()
 
     action_1 = -0.5
-    child_1 = ActionNode((1, 2, 3), node)
-    node.add_action_node(action_1, child_1)
+    child_1 = ActionNode(action_1, (1, 2, 3), node)
+    node.add_action_node(child_1)
 
     action_2 = True
-    child_2 = ActionNode((True, False, ("garbage")), node)
-    node.add_action_node(action_2, child_2)
+    child_2 = ActionNode(action_2, (True, False, ("garbage")), node)
+    node.add_action_node(child_2)
 
     assert node.child_stats == {
         action_1: child_1.stats,
@@ -162,6 +181,42 @@ def test_deterministic_node():
 
     assert root.stats["stat1"] == 1
     assert root.child_stats == {"some_action": child.stats}
+
+
+def test_history():
+    """Tests :meth:`online_pomdp_planning.mcts.ObservationNode.history`"""
+    root = ObservationNode()
+
+    first_action_node = ActionNode("first action", {"first"}, root)
+    root.add_action_node(first_action_node)
+
+    first_observation_node = ObservationNode("first observation", first_action_node)
+    first_action_node.add_observation_node(first_observation_node)
+
+    assert root.history() == []
+
+    hist = first_observation_node.history()
+    assert hist[0].action == "first action"
+    assert hist[0].observation == "first observation"
+
+    assert len(hist) == 1
+
+    second_action_node = ActionNode(
+        "second action", {"some stat: 0"}, first_observation_node
+    )
+    first_observation_node.add_action_node(second_action_node)
+
+    second_observation_node = ObservationNode("second observation", second_action_node)
+    second_action_node.add_observation_node(second_observation_node)
+
+    hist = second_observation_node.history()
+
+    assert hist[0].action == "first action"
+    assert hist[0].observation == "first observation"
+    assert hist[-1].action == "second action"
+    assert hist[-1].observation == "second observation"
+
+    assert len(hist) == 2
 
 
 @pytest.mark.parametrize(
@@ -197,9 +252,7 @@ def test_has_simulated_n_times_asserts():
 )
 def test_create_root_node_with_child_for_all_actions(actions, init_stats):
     """Tests :func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`"""
-    node = create_root_node_with_child_for_all_actions(
-        None, {}, actions, lambda a: init_stats[a]
-    )
+    node = create_root_node_with_child_for_all_actions(None, {}, init_stats)
 
     for a in actions:
         assert node.action_node(a).stats == init_stats[a]
@@ -355,25 +408,28 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     """tests :func:~online_pomdp_planning.mcts.expand_node_with_all_actions"""
     parent = ObservationNode()
     stats = 0
-    node = ActionNode(stats, parent)
+    action = "action"
+    node = ActionNode(action, stats, parent)
 
     info = {"mcts_num_action_nodes": 0}
-    expand_node_with_all_actions(actions, lambda a: init_stats[a], o, node, info)
+    expand_node_with_all_actions(init_stats, o, node, info)
 
     expansion = node.observation_node(o)
 
     assert info["mcts_num_action_nodes"] == 1
     assert expansion.parent is node
     assert node.observation_node(o) is expansion
+    assert node.observation_node(o).observation is o
     assert len(expansion.action_nodes) == len(actions)
 
     for a, n in expansion.action_nodes.items():
         assert len(n.observation_nodes) == 0
         assert n.parent == expansion
+        assert n.action is a
         assert n.stats == init_stats[a]
 
     # test that calling again will results in a no-operation
-    expand_node_with_all_actions(actions, lambda a: init_stats[a], o, node, info)
+    expand_node_with_all_actions(init_stats, o, node, info)
 
     assert info["mcts_num_action_nodes"] == 1
     assert expansion.parent is node
@@ -383,6 +439,7 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     for a, n in expansion.action_nodes.items():
         assert len(n.observation_nodes) == 0
         assert n.parent == expansion
+        assert n.action is a
         assert n.stats == init_stats[a]
 
 
@@ -634,30 +691,36 @@ def construct_ucb_tree(observation_from_simulator) -> ObservationNode:
 
     # two initial action nodes, action `False` is better
     better_first_action = False
-    better_first_action_node = ActionNode({"qval": 3.4, "n": 3}, root)
+    better_first_action_node = ActionNode(
+        better_first_action, {"qval": 3.4, "n": 3}, root
+    )
     worse_first_action = 2
-    worse_first_action_node = ActionNode({"qval": -2.0, "n": 4}, root)
+    worse_first_action_node = ActionNode(
+        worse_first_action, {"qval": -2.0, "n": 4}, root
+    )
 
-    root.add_action_node(better_first_action, better_first_action_node)
-    root.add_action_node(worse_first_action, worse_first_action_node)
+    root.add_action_node(better_first_action_node)
+    root.add_action_node(worse_first_action_node)
 
     # three observation nodes; observation `2` is returned by simulator
-    first_picked_observation_node = ObservationNode(better_first_action_node)
+    first_picked_observation_node = ObservationNode(
+        observation_from_simulator, better_first_action_node
+    )
+    better_first_action_node.add_observation_node(first_picked_observation_node)
     better_first_action_node.add_observation_node(
-        observation_from_simulator, first_picked_observation_node
+        ObservationNode(True, better_first_action_node)
     )
     better_first_action_node.add_observation_node(
-        True, ObservationNode(better_first_action_node)
-    )
-    better_first_action_node.add_observation_node(
-        (100), ObservationNode(better_first_action_node)
+        ObservationNode((100), better_first_action_node)
     )
 
     # one leaf action node
-    leaf_action_node = ActionNode({"qval": 0, "n": 0}, first_picked_observation_node)
+    leaf_action_node = ActionNode(
+        (10, 2), {"qval": 0, "n": 0}, first_picked_observation_node
+    )
     better_first_action_node.observation_node(
         observation_from_simulator
-    ).add_action_node((10, 2), leaf_action_node)
+    ).add_action_node(leaf_action_node)
 
     return root
 
@@ -810,7 +873,7 @@ def test_select_deterministc_leaf_by_max_scores():
 def test_backprop_running_q_assertion():
     """Tests that :func:`~online_pomdp_planning.mcts.backprop_running_q` raises bad discount"""
     root = ObservationNode()
-    leaf = ActionNode({"qval": 0.3, "n": 1}, root)
+    leaf = ActionNode("some action", {"qval": 0.3, "n": 1}, root)
 
     with pytest.raises(AssertionError):
         backprop_running_q(
@@ -925,7 +988,9 @@ def test_deterministic_qval_backpropagation():
 def test_rollout():
     """Tests :func:`~online_pomdp_planning.mcts.rollout`"""
 
-    pol = partial(random_policy, ([False, 1, (10, 2)]))
+    def pol(s, o) -> Action:
+        return random_policy([False, 1, (10, 2)], s, o)
+
     discount_factor = 0.9
     depth = 3
     state = 1
@@ -953,7 +1018,9 @@ def test_rollout():
 def test_expand_and_rollout():
     """Tests :func:`expansion`"""
 
-    pol = partial(random_policy, ([False, 1, (10, 2)]))
+    def pol(s, o) -> Action:
+        return random_policy([False, 1, (10, 2)], s, o)
+
     discount_factor = 0.9
     depth = 3
     state = 1
@@ -965,7 +1032,7 @@ def test_expand_and_rollout():
 
     expansion_results = {}
 
-    def save_expansion(o, a, info):
+    def save_expansion(o: Observation, a: ActionNode, info: Info):
         """Mock expansion"""
         expansion_results["obs"] = o
         expansion_results["leaf"] = a

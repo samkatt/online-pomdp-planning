@@ -115,7 +115,7 @@ effective implementations can be domain-specific policies or evaluation models
 Provided implementations:
 
     - :func:`~online_pomdp_planning.mcts.expand_and_rollout`
-    - :func:`~online_pomdp_planning.mcts.state_based_model_evaluation`
+    - :func:`~online_pomdp_planning.mcts.expand_and_evaluate_with_model`
 
 It is common for the expansion and evaluation to be fairly separate concerns,
 so we provide an interface for purely expanding that can be re-used:

@@ -2,15 +2,16 @@
 import random
 from collections import Counter
 from typing import Counter as CounterType
-from typing import Dict, List, Mapping, Tuple
+from typing import Dict, List, Tuple
 
 import pytest
 
 from online_pomdp_planning.mcts import (
+    ActionStats,
     MuzeroInferenceOutput,
     create_muzero,
     create_POUCT,
-    create_POUCT_with_state_models,
+    create_POUCT_with_model,
 )
 from online_pomdp_planning.types import Action
 
@@ -54,14 +55,18 @@ class Tiger:
         return s, o, r, True
 
     @staticmethod
-    def state_evaluation(s) -> Tuple[float, Mapping[int, float]]:
+    def state_evaluation(s) -> Tuple[float, ActionStats]:
         """A 'state-based model' for the Tiger
 
         Hard-coded evaluation and prior for this problem.
         """
-        good_door = s
+        good_door: int = s
         bad_door = int(not s)
-        return 4.0, {Tiger.H: 0.4, good_door: 0.4, bad_door: 0.2}
+        return 4.0, {
+            Tiger.H: {"qval": 0, "prior": 0.4, "n": 1},
+            good_door: {"qval": 0, "prior": 0.4, "n": 1},
+            bad_door: {"qval": 0, "prior": 0.2, "n": 1},
+        }
 
 
 def uniform_tiger_belief():
@@ -106,15 +111,19 @@ def test_pouct():
 
 
 def test_pouct_with_prior():
-    """tests :func:`~online_pomdp_planning.mcts.create_POUCT_with_state_models` on Tiger"""
+    """tests :func:`~online_pomdp_planning.mcts.create_POUCT_with_model` on Tiger"""
+
+    def evaluation_model(leaf, state, obs, info):
+        """'learned' evaluation model"""
+        return Tiger.state_evaluation(state)
 
     ucb_constant = 0.5
 
-    planner = create_POUCT_with_state_models(
+    planner = create_POUCT_with_model(
         Tiger.actions(),
         Tiger.sim,
         2 * 16384,
-        Tiger.state_evaluation,
+        evaluation_model,
         ucb_constant=ucb_constant,
     )
 
