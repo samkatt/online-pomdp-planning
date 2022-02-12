@@ -43,8 +43,7 @@ This library implements MCTS as a combination of:
 #. `Tree construction`_
 #. `Stop condition`_
 #. `Leaf selection`_
-#. `Leaf expansion`_
-#. `Leaf Evaluation`_
+#. `Leaf expansion and evaluation`_
 #. `Back propagation`_
 #. `Action selector`_
 
@@ -99,28 +98,14 @@ Provided implementations:
 
     - :func:`~online_pomdp_planning.mcts.select_leaf_by_max_scores`
 
-Leaf expansion
---------------
 
-The expansion method decides how to grow the tree upon reaching a leaf. The
-most common approach is to add a node that represents the simulated
-(action-observation) 'history' with some initial statistics:
+Leaf expansion and evaluation
+-----------------------------
 
-.. automethod:: online_pomdp_planning.mcts.Expansion.__call__
-   :noindex:
+The expansion and evaluation of a leaf node grows the tree at ``leaf`` and
+gives an estimated return (value) of it:
 
-Provided implementations:
-
-    - :func:`~online_pomdp_planning.mcts.expand_node_with_all_actions`
-      expand a new node with references for all provided actions
-
-Leaf evaluation
----------------
-
-The evaluation of a leaf node gives an estimated return (value) of a node,
-called when a leaf is reached:
-
-.. automethod:: online_pomdp_planning.mcts.Evaluation.__call__
+.. automethod:: online_pomdp_planning.mcts.ExpandAndEvaluate.__call__
    :noindex:
 
 A common implementation is a (random) interaction with the environment. More
@@ -129,7 +114,21 @@ effective implementations can be domain-specific policies or evaluation models
 
 Provided implementations:
 
-    - :func:`~online_pomdp_planning.mcts.rollout`
+    - :func:`~online_pomdp_planning.mcts.expand_and_rollout`
+    - :func:`~online_pomdp_planning.mcts.state_based_model_evaluation`
+
+It is common for the expansion and evaluation to be fairly separate concerns,
+so we provide an interface for purely expanding that can be re-used:
+
+.. automethod:: online_pomdp_planning.mcts.Expansion.__call__
+   :noindex:
+
+The most common approach is to add a node that represents the simulated
+(action-observation) 'history' with some initial statistics:
+
+    - :func:`~online_pomdp_planning.mcts.expand_node_with_all_actions`
+      expand a new node with references for all provided actions
+
 
 Back propagation
 ----------------
@@ -161,6 +160,8 @@ in the root node.
 Provided implementations:
 
     - :func:`~online_pomdp_planning.mcts.max_q_action_selector` picks the action with max q value
+    - :func:`~online_pomdp_planning.mcts.max_visits_action_selector` picks the action with max visits
+    - :func:`~online_pomdp_planning.mcts.visit_prob_action_selector` sample the action according to visitation
 
 A common method is to pick the action with highest associated average return.
 

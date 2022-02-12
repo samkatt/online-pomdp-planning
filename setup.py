@@ -14,6 +14,7 @@ requirements = [
     "tqdm",
     "typing_extensions",
     "numpy",
+    "more_itertools",
 ]
 
 setup_requirements = [

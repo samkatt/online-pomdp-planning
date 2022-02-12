@@ -12,12 +12,16 @@ from online_pomdp_planning.mcts import (
     DeterministicNode,
     MuzeroInferenceOutput,
     ObservationNode,
+    alphazero_ucb,
+    alphazero_ucb_scores,
     backprop_running_q,
     create_muzero_root,
     create_root_node_with_child_for_all_actions,
     deterministic_qval_backpropagation,
+    expand_and_rollout,
     expand_node_with_all_actions,
     has_simulated_n_times,
+    initiate_info,
     max_q_action_selector,
     max_visits_action_selector,
     muzero_expand_node,
@@ -32,6 +36,18 @@ from online_pomdp_planning.mcts import (
 )
 from online_pomdp_planning.types import Action
 from online_pomdp_planning.utils import MovingStatistic
+
+
+def test_initiate_info():
+    """Tests :func:`~online_pomdp_planning.mcts.test_initiate_info`"""
+    info = initiate_info()
+
+    assert info["ucb_num_terminal_sims"] == 0
+    assert info["mcts_num_action_nodes"] == 0
+    assert info["iteration"] == 0
+    # little cheat to easily check for equality, please don't do this in your own code
+    assert str(info["ucb_tree_depth"]) == str(MovingStatistic())
+    assert str(info["q_statistic"]) == str(MovingStatistic())
 
 
 def test_action_constructor():
@@ -172,16 +188,21 @@ def test_has_simulated_n_times_asserts():
 @pytest.mark.parametrize(
     "actions,init_stats",
     [
-        ([False, 1, (10, 2)], "some garbage"),
-        ([], {"qval": 10, "n": 0}),
+        (
+            [False, 1, (10, 2)],
+            {False: {"some garbage"}, 1: {"more gargbage"}, (10, 2): {"HAH"}},
+        ),
+        ((), {}),
     ],
 )
 def test_create_root_node_with_child_for_all_actions(actions, init_stats):
     """Tests :func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`"""
-    node = create_root_node_with_child_for_all_actions(actions, init_stats)
+    node = create_root_node_with_child_for_all_actions(
+        None, {}, actions, lambda a: init_stats[a]
+    )
 
     for a in actions:
-        assert node.action_node(a).stats == init_stats
+        assert node.action_node(a).stats == init_stats[a]
         assert node.action_node(a).parent == node
         assert node.action_node(a).observation_nodes == {}
 
@@ -195,7 +216,12 @@ def test_create_muzero_root():
     noise_exploration_fraction = 0.2
 
     root = create_muzero_root(
-        latent_state, reward, prior, noise_dirichlet_alpha, noise_exploration_fraction
+        latent_state,
+        {},
+        reward,
+        prior,
+        noise_dirichlet_alpha,
+        noise_exploration_fraction,
     )
 
     assert root.stats["latent_state"] == latent_state
@@ -219,13 +245,13 @@ def test_create_muzero_root():
     # tests on prior and setting noise
     # little noise:
     root = create_muzero_root(
-        latent_state, reward, prior, noise_dirichlet_alpha, 0.000001
+        latent_state, {}, reward, prior, noise_dirichlet_alpha, 0.000001
     )
     for a, stat in root.child_stats.items():
         assert pytest.approx(stat["prior"], rel=0.001) == prior[a]
 
     # much noise:
-    root = create_muzero_root(latent_state, reward, prior, 100000, 1)
+    root = create_muzero_root(latent_state, {}, reward, prior, 100000, 1)
     for a, stat in root.child_stats.items():
         assert pytest.approx(stat["prior"], rel=0.01) == 1 / 3
 
@@ -317,8 +343,12 @@ def test_visit_prob_action_selector(stats, tot, max_a):
 @pytest.mark.parametrize(
     "o,actions,init_stats",
     [
-        (10, [0, True, (10.0)], {"q-value": 0, "n": 0}),
-        (10, [0, (10.0)], {"q-value": 10, "n": 0}),
+        (
+            10,
+            [0, True, (10.0)],
+            {0: {"q-value": 0, "n": 0}, True: {"garbage"}, (10.0): {"tupled garb"}},
+        ),
+        (10, [0, (10.0)], {0: {"q-value": 10, "n": 0}, (10.0): {"some stuff"}}),
     ],
 )
 def test_expand_node_with_all_actions(o, actions, init_stats):
@@ -327,8 +357,8 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     stats = 0
     node = ActionNode(stats, parent)
 
-    info = {}
-    expand_node_with_all_actions(actions, init_stats, o, node, info)
+    info = {"mcts_num_action_nodes": 0}
+    expand_node_with_all_actions(actions, lambda a: init_stats[a], o, node, info)
 
     expansion = node.observation_node(o)
 
@@ -337,11 +367,23 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     assert node.observation_node(o) is expansion
     assert len(expansion.action_nodes) == len(actions)
 
-    for n in expansion.action_nodes.values():
+    for a, n in expansion.action_nodes.items():
         assert len(n.observation_nodes) == 0
         assert n.parent == expansion
-        assert n.stats == init_stats
-        assert n.stats is not init_stats  # please be copy
+        assert n.stats == init_stats[a]
+
+    # test that calling again will results in a no-operation
+    expand_node_with_all_actions(actions, lambda a: init_stats[a], o, node, info)
+
+    assert info["mcts_num_action_nodes"] == 1
+    assert expansion.parent is node
+    assert node.observation_node(o) is expansion
+    assert len(expansion.action_nodes) == len(actions)
+
+    for a, n in expansion.action_nodes.items():
+        assert len(n.observation_nodes) == 0
+        assert n.parent == expansion
+        assert n.stats == init_stats[a]
 
 
 def fake_muzero_recurrance_inference(
@@ -397,7 +439,6 @@ def test_muzero_expand_node():
     "q,n,n_total,ucb_constant,expected_raise",
     [
         (123, 0, 234, 452, False),
-        (0, 0, -234, False, True),
         (0, -1, 10, False, True),
         (0, 1, 1, 0, False),
         (-5.2, 1, 1, 1, False),
@@ -407,9 +448,9 @@ def test_ucb_raises(q, n, n_total, ucb_constant, expected_raise):
     """Tests that :func:`~online_pomdp_planning.mcts.ucb` raises on invalid input"""
     if expected_raise:
         with pytest.raises(AssertionError):
-            ucb(q, n, n_total, ucb_constant)
+            ucb(q, n, log(n_total), ucb_constant)
     else:
-        ucb(q, n, n_total, ucb_constant)
+        ucb(q, n, log(n_total), ucb_constant)
 
 
 @pytest.mark.parametrize(
@@ -425,7 +466,7 @@ def test_ucb_raises(q, n, n_total, ucb_constant, expected_raise):
 )
 def test_ucb(q, n, n_total, ucb_constant, expectation):
     """Tests :func:`~online_pomdp_planning.mcts.ucb`"""
-    assert ucb(q, n, n_total, ucb_constant) == expectation
+    assert ucb(q, n, log(n_total), ucb_constant) == expectation
 
 
 def test_ucb_scores():
@@ -441,6 +482,102 @@ def test_ucb_scores():
     assert {"a1", True, 10} == set(action_scores.keys())
     assert action_scores[10] == float("inf")
     assert action_scores[True] == 1 + 50.3 * sqrt(log(10) / 1)
+
+
+@pytest.mark.parametrize(
+    "q,n,prior,c,tot,res",
+    [
+        (  # base case
+            0,
+            0,
+            1.0,
+            1.0,
+            1,
+            1,
+        ),
+        (  # Q value
+            0.4,
+            0,
+            1.0,
+            1.0,
+            1,
+            1.4,
+        ),
+        (  # c
+            0,
+            0,
+            1.0,
+            1.2,
+            1,
+            1.2,
+        ),
+        (  # prior
+            0,
+            0,
+            0.8,
+            1.0,
+            1,
+            0.8,
+        ),
+        (  # tot
+            0,
+            0,
+            1.0,
+            1.0,
+            10,
+            sqrt(10),
+        ),
+        (  # random
+            0.68,
+            23,
+            0.2,
+            1.25,
+            89,
+            0.7782706367922563,
+        ),
+    ],
+)
+def test_alphazero_ucb(q, n, prior, c, tot, res):
+    """tests `func:alphazero_score`"""
+
+    # basic tests that should always return 0 or ``q``
+    assert alphazero_ucb(0, n, 0, sqrt(tot), c) == 0
+    assert alphazero_ucb(0, n, prior, sqrt(tot), 0) == 0
+    assert alphazero_ucb(q, n, 0, sqrt(tot), c) == q
+    assert alphazero_ucb(q, n, prior, sqrt(tot), 0) == q
+
+    assert pytest.approx(alphazero_ucb(q, n, prior, sqrt(tot), c)) == res
+
+
+def test_alphazero_ucb_scores():
+    """tests :func:`alphazero_ucb_scores`"""
+    stats = {
+        "a1": {"qval": 0, "n": 0, "prior": 0.7},
+        True: {"qval": 0, "n": 0, "prior": 0.1},
+        False: {"qval": 0, "n": 2, "prior": 0.1},
+        (0, "a4"): {"qval": 2.3, "n": 2, "prior": 0.1},
+    }
+
+    info = {"q_statistic": MovingStatistic()}
+
+    scores = alphazero_ucb_scores(stats, info, 0.5)
+
+    assert len(scores) == len(stats)
+    assert pytest.approx(scores["a1"]) == 0.7 * 2 * 0.5
+    assert pytest.approx(scores[True]) == 0.1 * 2 * 0.5
+    assert pytest.approx(scores[False]) == 0.1 * (2 / 3) * 0.5
+    assert pytest.approx(scores[(0, "a4")]) == 2.3 + 0.5 * (2 / 3) * 0.1
+
+    info["q_statistic"].add(0)
+    info["q_statistic"].add(2.3)
+
+    scores = alphazero_ucb_scores(stats, info, 0.5)
+
+    assert len(scores) == len(stats)
+    assert pytest.approx(scores["a1"]) == 0.7 * 2 * 0.5
+    assert pytest.approx(scores[True]) == 0.1 * 2 * 0.5
+    assert pytest.approx(scores[False]) == 0.1 * (2 / 3) * 0.5
+    assert pytest.approx(scores[(0, "a4")]) == 1.0 + 0.5 * (2 / 3) * 0.1
 
 
 @pytest.mark.parametrize(
@@ -532,7 +669,11 @@ def run_ucb_select_leaf(observation_from_simulator, root, max_depth=1000):
         """Fake simulator, returns state 0, obs 2, reward .5, not terminal, and info"""
         return 0, observation_from_simulator, 0.5, False
 
-    info = {}
+    info = {
+        "leaf_depth": 0,
+        "ucb_tree_depth": MovingStatistic(),
+        "ucb_num_terminal_sims": 0,
+    }
     scoring_method = partial(ucb_scores, ucb_constant=1)
     chosen_leaf, s, obs, term, rewards = select_leaf_by_max_scores(
         sim=sim,
@@ -552,7 +693,11 @@ def run_ucb_select_leaf_terminal_sim(observation_from_simulator, root):
         """Returns the same as :func:`sim` but sets terminal flag to ``True``"""
         return 0, observation_from_simulator, 0.5, True
 
-    info = {}
+    info = {
+        "leaf_depth": 0,
+        "ucb_tree_depth": MovingStatistic(),
+        "ucb_num_terminal_sims": 0,
+    }
     scoring_method = partial(ucb_scores, ucb_constant=1)
     chosen_leaf, s, obs, term, rewards = select_leaf_by_max_scores(
         sim=term_sim,
@@ -613,7 +758,7 @@ def test_select_leaf_by_max_scores():
 def test_select_deterministc_leaf_by_max_scores():
     """Some tests on :func:`select_deterministc_leaf_by_max_scores`"""
     node_scoring_method = partial(ucb_scores, ucb_constant=10)
-    info = {}
+    info = {"ucb_tree_depth": MovingStatistic()}
 
     # if only one leaf, should find it
     root = DeterministicNode(
@@ -664,11 +809,34 @@ def test_select_deterministc_leaf_by_max_scores():
 
 def test_backprop_running_q_assertion():
     """Tests that :func:`~online_pomdp_planning.mcts.backprop_running_q` raises bad discount"""
-    some_obs_node = ObservationNode()
+    root = ObservationNode()
+    leaf = ActionNode({"qval": 0.3, "n": 1}, root)
+
     with pytest.raises(AssertionError):
-        backprop_running_q(-1, ActionNode("gargabe", some_obs_node), [], 0, {})
+        backprop_running_q(
+            -1,
+            leaf,
+            [1.0],
+            0,
+            {"q_statistic": MovingStatistic()},
+        )
     with pytest.raises(AssertionError):
-        backprop_running_q(1.1, ActionNode("gargabe", some_obs_node), [], 0, {})
+        backprop_running_q(
+            1.1,
+            leaf,
+            [1.0],
+            0,
+            {"q_statistic": MovingStatistic()},
+        )
+
+    # ``None`` is acceptable leaf evaluation
+    backprop_running_q(
+        0.9,
+        leaf,
+        [1.0],
+        None,
+        {"q_statistic": MovingStatistic()},
+    )
 
 
 @pytest.mark.parametrize(
@@ -691,7 +859,11 @@ def test_backprop_running_q(discount_factor, new_q_first, new_q_leaf):
     leaf_selection_output = [0.1, 7.0]
     leaf_evaluation = -5
     backprop_running_q(
-        discount_factor, leaf_node, leaf_selection_output, leaf_evaluation, {}
+        discount_factor,
+        leaf_node,
+        leaf_selection_output,
+        leaf_evaluation,
+        {"q_statistic": MovingStatistic()},
     )
 
     # lots of math by hand, hope this never needs to be re-computed
@@ -746,6 +918,9 @@ def test_deterministic_qval_backpropagation():
     # return = 9 * .9 + 0.5 = ..., ... / 1
     assert root.stats["qval"] == 9 * 0.9 + 0.5
 
+    # Quick test to see that ``None`` is acceptable as leaf eval
+    deterministic_qval_backpropagation(0.9, second_leaf, None, None, info)
+
 
 def test_rollout():
     """Tests :func:`~online_pomdp_planning.mcts.rollout`"""
@@ -753,7 +928,6 @@ def test_rollout():
     pol = partial(random_policy, ([False, 1, (10, 2)]))
     discount_factor = 0.9
     depth = 3
-    terminal = False
     state = 1
     obs = 0
 
@@ -765,19 +939,47 @@ def test_rollout():
         """Returns the same as :func:`sim` but sets terminal flag to ``True``"""
         return 0, 2, 0.5, True
 
-    assert (
-        rollout(pol, term_sim, depth, discount_factor, state, obs, t=True, info={}) == 0
-    )
-    assert rollout(pol, term_sim, 0, discount_factor, state, obs, terminal, {}) == 0
+    assert rollout(pol, term_sim, 0, discount_factor, state, obs) == 0
 
     assert (
-        rollout(pol, term_sim, depth, discount_factor, state, obs, terminal, {}) == 0.5
+        rollout(pol, term_sim, depth, discount_factor, state, obs) == 0.5
     ), "terminal sim should allow 1 action"
 
     assert (
-        rollout(pol, sim, 2, discount_factor, state, obs, terminal, {})
-        == 0.5 + discount_factor * 0.5
+        rollout(pol, sim, 2, discount_factor, state, obs) == 0.5 + discount_factor * 0.5
     ), "1 depth should allow 1 action"
+
+
+def test_expand_and_rollout():
+    """Tests :func:`expansion`"""
+
+    pol = partial(random_policy, ([False, 1, (10, 2)]))
+    discount_factor = 0.9
+    depth = 3
+    state = 1
+    obs = 0
+
+    def sim(s, a):
+        """Fake simulator, returns state 0, obs 2, reward .5 and not terminal"""
+        return 0, 2, 0.5, True
+
+    expansion_results = {}
+
+    def save_expansion(o, a, info):
+        """Mock expansion"""
+        expansion_results["obs"] = o
+        expansion_results["leaf"] = a
+        expansion_results["info"] = info
+
+    ret = expand_and_rollout(
+        save_expansion, pol, sim, depth, discount_factor, "leaf!", state, obs, {}
+    )
+
+    assert expansion_results["leaf"] == "leaf!"
+    assert expansion_results["obs"] == obs
+    assert expansion_results["info"] == {}
+
+    assert ret == 0.5
 
 
 if __name__ == "__main__":
