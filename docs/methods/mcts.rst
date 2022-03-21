@@ -162,6 +162,7 @@ Provided implementations:
     - :func:`~online_pomdp_planning.mcts.max_q_action_selector` picks the action with max q value
     - :func:`~online_pomdp_planning.mcts.max_visits_action_selector` picks the action with max visits
     - :func:`~online_pomdp_planning.mcts.visit_prob_action_selector` sample the action according to visitation
+    - :func:`~online_pomdp_planning.mcts.soft_q_action_selector` sample the action according to soft-Q distribution
 
 A common method is to pick the action with highest associated average return.
 

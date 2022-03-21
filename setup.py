@@ -15,6 +15,7 @@ requirements = [
     "typing_extensions",
     "numpy",
     "more_itertools",
+    "scipy"
 ]
 
 setup_requirements = [

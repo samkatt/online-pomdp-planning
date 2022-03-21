@@ -19,6 +19,7 @@ from typing import (
 )
 
 import numpy as np
+from scipy.special import softmax
 from tqdm import tqdm
 from typing_extensions import Protocol
 
@@ -1189,6 +1190,28 @@ def max_q_action_selector(stats: ActionStats, info: Info) -> Action:
         qvals, key=lambda action_qval_pair: action_qval_pair[1], reverse=True
     )
     return info["max_q_action_selector-values"][0][0]
+
+
+def soft_q_action_selector(stats: ActionStats, info: Info) -> Action:
+    """Samples action through softmax on their q-values
+
+    Assumes stats has a "qval" attribute
+
+    Implements :class:`ActionSelection`
+
+    Adds softmax probabilities to
+    `info["soft_q_action_selector-probabilities"]`
+
+
+    :param stats: assumes a "q" property in the statistic
+    :param info: run time information (adds "soft_q_action_selector-probabilities")
+    :return: sample action according to ~ softmax(q)
+    """
+    soft_q = softmax([s["qval"] for s in stats.values()])
+
+    info["soft_q_action_selector-probabilities"] = dict(zip(stats, soft_q))
+
+    return random.choices(list(stats.keys()), soft_q)[0]
 
 
 def max_visits_action_selector(stats: ActionStats, info: Info) -> Action:

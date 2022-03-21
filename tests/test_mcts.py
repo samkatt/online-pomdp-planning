@@ -3,7 +3,7 @@
 
 from functools import partial
 from math import log, sqrt
-from typing import Dict
+from typing import Counter, Dict
 
 import pytest
 
@@ -30,6 +30,7 @@ from online_pomdp_planning.mcts import (
     select_action,
     select_deterministc_leaf_by_max_scores,
     select_leaf_by_max_scores,
+    soft_q_action_selector,
     ucb,
     ucb_scores,
     visit_prob_action_selector,
@@ -332,6 +333,58 @@ def test_max_q_action_selector(stats, max_a):
         assert len(x) == 2
         print(x)
         assert stats[x[0]]["qval"] == x[1]
+
+
+@pytest.mark.parametrize(
+    "stats,max_a",
+    [
+        ({"max_a": {"qval": 1.0}}, "max_a"),
+        ({"max_a": {"qval": -1.0}}, "max_a"),
+        ({"max_a": {"qval": 20}, False: {"qval": -10.0}}, "max_a"),
+        (
+            {
+                False: {"qval": 10.0},
+                True: {"uselessstuff": 10, "qval": 10000},
+                "a1": {"qval": -100},
+            },
+            True,
+        ),
+    ],
+)
+def test_soft_q_action_selector_deterministic(stats, max_a):
+    """tests :func:~online_pomdp_planning.mcts.soft_q_action_selector for simple deterministic scenarios"""
+    info = {}
+
+    assert soft_q_action_selector(stats, info) == max_a
+
+    assert len(info["soft_q_action_selector-probabilities"]) == len(stats)
+    assert sum(
+        list(info["soft_q_action_selector-probabilities"].values())
+    ) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize(
+    "stats,sorted_actions",
+    [
+        ({"max_a": {"qval": 1.0}}, ["max_a"]),
+        ({"max_a": {"qval": -1.0}, "min_a": {"qval": -2.0}}, ["max_a", "min_a"]),
+        ({"max_a": {"qval": 0.45}, False: {"qval": -0.2}}, ["max_a", False]),
+        (
+            {
+                False: {"qval": 1.34},
+                True: {"uselessstuff": 8.12, "qval": 4.43},
+                "a1": {"qval": -1.2},
+            },
+            [True, False, "a1"],
+        ),
+    ],
+)
+def test_soft_q_action_selector(stats, sorted_actions):
+    """tests :func:~online_pomdp_planning.mcts.soft_q_action_selector for stochastic scenarios"""
+    info = {}
+
+    actions = Counter([soft_q_action_selector(stats, info) for _ in range(1000)])
+    assert [v for v, _ in actions.most_common()] == sorted_actions
 
 
 @pytest.mark.parametrize(
