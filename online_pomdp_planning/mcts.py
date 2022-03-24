@@ -606,6 +606,8 @@ def select_action(
     method. This function simply picks a randomly between the actions that are
     given the maximum score.
 
+    Given ``scoring_method``, implements :class:`ActionSelection`
+
     :param stats: the statistics: Action -> Dict where Dict is {"qval": float, "n": int}
     :param info: current MCTS running info, given to ``scoring_method``
     :param scoring_method: the method that transforms ``stats`` into scores
@@ -1185,11 +1187,10 @@ def max_q_action_selector(stats: ActionStats, info: Info) -> Action:
     :param info: run time information (adds "max_q_action_selector-values")
     :return: action with highest q value
     """
-    qvals = [(k, v["qval"]) for k, v in stats.items()]
-    info["max_q_action_selector-values"] = sorted(
-        qvals, key=lambda action_qval_pair: action_qval_pair[1], reverse=True
-    )
-    return info["max_q_action_selector-values"][0][0]
+    qvals = {k: v["qval"] for k, v in stats.items()}
+    info["max_q_action_selector-values"] = qvals
+
+    return select_action(stats, info, lambda _, __: qvals)
 
 
 def soft_q_action_selector(stats: ActionStats, info: Info) -> Action:
@@ -1208,7 +1209,6 @@ def soft_q_action_selector(stats: ActionStats, info: Info) -> Action:
     :return: sample action according to ~ softmax(q)
     """
     soft_q = softmax([s["qval"] for s in stats.values()])
-
     info["soft_q_action_selector-probabilities"] = dict(zip(stats, soft_q))
 
     return random.choices(list(stats.keys()), soft_q)[0]
@@ -1224,15 +1224,10 @@ def max_visits_action_selector(stats: ActionStats, info: Info) -> Action:
     Populates `info["visit_action_selector-counts"]` with visit counts
 
     """
-    action_visits = [(k, v["n"]) for k, v in stats.items()]
+    action_visits = {k: v["n"] for k, v in stats.items()}
+    info["visit_action_selector-counts"] = action_visits
 
-    info["visit_action_selector-counts"] = sorted(
-        action_visits,
-        key=lambda pair: pair[1],
-        reverse=True,
-    )
-
-    return info["visit_action_selector-counts"][0][0]
+    return select_action(stats, info, lambda _, __: action_visits)
 
 
 def visit_prob_action_selector(stats: ActionStats, info: Info) -> Action:

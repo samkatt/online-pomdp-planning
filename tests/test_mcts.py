@@ -325,14 +325,11 @@ def test_max_q_action_selector(stats, max_a):
     info = {}
     assert max_q_action_selector(stats, info) == max_a
 
-    sorted_q_vals = info["max_q_action_selector-values"]
-    assert sorted_q_vals[0][0] == max_a
-    assert len(sorted_q_vals) == len(stats)
+    qvals = info["max_q_action_selector-values"]
+    assert len(qvals) == len(stats)
 
-    for x in sorted_q_vals:
-        assert len(x) == 2
-        print(x)
-        assert stats[x[0]]["qval"] == x[1]
+    for a, s in stats.items():
+        assert qvals[a] == s["qval"]
 
 
 @pytest.mark.parametrize(
@@ -407,10 +404,9 @@ def test_max_visits_action_selector(stats, max_a):
     act_to_visits = info["visit_action_selector-counts"]
 
     assert len(act_to_visits) == len(stats)
-    assert act_to_visits[0][0] == max_a
 
-    for a, n in act_to_visits:
-        assert stats[a]["n"] == n
+    for a, s in stats.items():
+        assert act_to_visits[a] == s["n"]
 
 
 @pytest.mark.parametrize(
