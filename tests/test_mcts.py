@@ -246,9 +246,12 @@ def test_has_simulated_n_times_asserts():
     [
         (
             [False, 1, (10, 2)],
-            {False: {"some garbage"}, 1: {"more gargbage"}, (10, 2): {"HAH"}},
+            {
+                False: {"some garbage": 100},
+                1: {"more gargbage": False},
+                (10, 2): {"HAH": "ha"},
+            },
         ),
-        ((), {}),
     ],
 )
 def test_create_root_node_with_child_for_all_actions(actions, init_stats):
@@ -259,6 +262,30 @@ def test_create_root_node_with_child_for_all_actions(actions, init_stats):
         assert node.action_node(a).stats == init_stats[a]
         assert node.action_node(a).parent == node
         assert node.action_node(a).observation_nodes == {}
+
+
+@pytest.mark.parametrize(
+    "actions,init_stats",
+    [
+        (
+            [False, 1, (10, 2)],
+            {
+                False: {"some garbage": 100, "qval": 1.12},
+                1: {"more gargbage": False, "qval": -12.234},
+                (10, 2): {"HAH": "ha", "qval": 0.023},
+            },
+        ),
+    ],
+)
+def test_create_root_node_with_child_for_all_actions_records_q(actions, init_stats):
+    """Tests :func:`~online_pomdp_planning.mcts.create_root_node_with_child_for_all_actions`
+
+    Make sure it adds q values to statistic
+    """
+    info = {"q_statistic": MovingStatistic()}
+    create_root_node_with_child_for_all_actions(None, info, init_stats)
+
+    assert info["q_statistic"].num == len(actions)
 
 
 def test_create_muzero_root():
@@ -454,7 +481,11 @@ def test_visit_prob_action_selector(stats, tot, max_a):
             [0, True, (10.0)],
             {0: {"q-value": 0, "n": 0}, True: {"garbage"}, (10.0): {"tupled garb"}},
         ),
-        (10, [0, (10.0)], {0: {"q-value": 10, "n": 0}, (10.0): {"some stuff"}}),
+        (
+            10,
+            [0, (10.0)],
+            {0: {"qval": 10, "n": 0}, (10.0): {"some stuff": "garbage", "qval": 0.3}},
+        ),
     ],
 )
 def test_expand_node_with_all_actions(o, actions, init_stats):
@@ -464,7 +495,7 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
     action = "action"
     node = ActionNode(action, stats, parent)
 
-    info = {"mcts_num_action_nodes": 0}
+    info = {"mcts_num_action_nodes": 0, "q_statistic": MovingStatistic()}
     expand_node_with_all_actions(init_stats, o, node, info)
 
     expansion = node.observation_node(o)
@@ -481,6 +512,9 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
         assert n.action is a
         assert n.stats == init_stats[a]
 
+    expected_number_of_qvals = len(actions) if "qval" in init_stats[actions[0]] else 0
+    assert info["q_statistic"].num == expected_number_of_qvals
+
     # test that calling again will results in a no-operation
     expand_node_with_all_actions(init_stats, o, node, info)
 
@@ -494,6 +528,8 @@ def test_expand_node_with_all_actions(o, actions, init_stats):
         assert n.parent == expansion
         assert n.action is a
         assert n.stats == init_stats[a]
+
+    assert info["q_statistic"].num == expected_number_of_qvals
 
 
 def fake_muzero_recurrance_inference(

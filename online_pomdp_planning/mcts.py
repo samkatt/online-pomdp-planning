@@ -798,6 +798,11 @@ def expand_node_with_all_actions(
     for a, stats in action_stats.items():
         expansion.add_action_node(ActionNode(a, stats, expansion))
 
+    # cheap test, assuming if one statistic contains "qval", then all do (and visa-versa)
+    if "q_statistic" in info and "qval" in next(iter(action_stats.values())):
+        for stats in action_stats.values():
+            info["q_statistic"].add(stats["qval"])
+
     action_node.add_observation_node(expansion)
 
 
@@ -987,8 +992,6 @@ def expand_and_evaluate_with_model(
     value.
 
     Given ``model`` implements :class:`ExpandAndEvaluate`.
-
-    XXX: hard-coded initial values and call to expand node down here is ugly
 
     Inspired from AlphaZero::
 
@@ -1314,6 +1317,11 @@ def create_root_node_with_child_for_all_actions(
 
     for a, stats in action_stats.items():
         root.add_action_node(ActionNode(a, stats, root))
+
+    # cheap test, assuming if one statistic contains "qval", then all do (and visa-versa)
+    if "q_statistic" in info and "qval" in next(iter(action_stats.values())):
+        for stats in action_stats.values():
+            info["q_statistic"].add(stats["qval"])
 
     return root
 
