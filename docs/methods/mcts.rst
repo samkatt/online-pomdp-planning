@@ -179,7 +179,7 @@ previous interfaces (note expansion and evaluation is merged here):
         - :class:`~online_pomdp_planning.mcts.create_muzero_root`
     - :class:`~online_pomdp_planning.mcts.DeterministicLeafSelection`, with implementation(s):
         - :class:`~online_pomdp_planning.mcts.select_deterministc_leaf_by_max_scores`
-            - with scoring method :func:`~online_pomdp_planning.mcts.muzero_ucb_scores`
+            - with scoring method :func:`~online_pomdp_planning.mcts.muzero_scores`
     - :class:`~online_pomdp_planning.mcts.DeterministicNodeExpansion`, with implementation(s):
         - :func:`~online_pomdp_planning.mcts.muzero_expand_node`
     - :func:`~online_pomdp_planning.mcts.DeterministicBackPropagation`, with implementation(s):

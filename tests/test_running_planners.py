@@ -87,21 +87,23 @@ def tiger_right_belief():
 def test_pouct():
     """tests :func:`~online_pomdp_planning.mcts.create_POUCT` on Tiger"""
 
-    planner = create_POUCT(Tiger.actions(), Tiger.sim, 2 * 16384, ucb_constant=100)
+    large_num_sum = 12345
+
+    planner = create_POUCT(Tiger.actions(), Tiger.sim, large_num_sum, ucb_constant=100)
 
     action, info = planner(uniform_tiger_belief)
     assert action == Tiger.H
-    assert info["iteration"] == 16384 * 2
+    assert info["iteration"] == large_num_sum
 
-    planner = create_POUCT(Tiger.actions(), Tiger.sim, 16384, ucb_constant=100)
+    planner = create_POUCT(Tiger.actions(), Tiger.sim, large_num_sum, ucb_constant=100)
     action, info = planner(tiger_left_belief)
     assert action == Tiger.L
-    assert info["iteration"] == 16384
+    assert info["iteration"] == large_num_sum
 
     planner = create_POUCT(
         Tiger.actions(),
         Tiger.sim,
-        16384,
+        large_num_sum,
         ucb_constant=100,
         leaf_eval=lambda leaf, s, o, info: 0,
     )

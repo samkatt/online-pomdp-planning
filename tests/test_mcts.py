@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 """tests for :mod:`online_pomdp_planning.mcts`"""
 
+import random
 from functools import partial
 from math import log, sqrt
+from operator import itemgetter
 from typing import Counter, Dict
 
+import numpy as np
 import pytest
 
 from online_pomdp_planning.mcts import (
@@ -12,8 +15,7 @@ from online_pomdp_planning.mcts import (
     DeterministicNode,
     MuzeroInferenceOutput,
     ObservationNode,
-    alphazero_ucb,
-    alphazero_ucb_scores,
+    alphazero_scores,
     backprop_running_q,
     create_muzero_root,
     create_root_node_with_child_for_all_actions,
@@ -25,14 +27,15 @@ from online_pomdp_planning.mcts import (
     max_q_action_selector,
     max_visits_action_selector,
     muzero_expand_node,
+    muzero_scores,
     random_policy,
     rollout,
     select_action,
     select_deterministc_leaf_by_max_scores,
     select_leaf_by_max_scores,
     soft_q_action_selector,
-    ucb,
     ucb_scores,
+    unified_ucb_scores,
     visit_prob_action_selector,
 )
 from online_pomdp_planning.types import Action, Info, Observation
@@ -577,40 +580,6 @@ def test_muzero_expand_node():
         assert first_leaf.child(a).stats["prior"] == policy[a]
 
 
-@pytest.mark.parametrize(
-    "q,n,n_total,ucb_constant,expected_raise",
-    [
-        (123, 0, 234, 452, False),
-        (0, -1, 10, False, True),
-        (0, 1, 1, 0, False),
-        (-5.2, 1, 1, 1, False),
-    ],
-)
-def test_ucb_raises(q, n, n_total, ucb_constant, expected_raise):
-    """Tests that :func:`~online_pomdp_planning.mcts.ucb` raises on invalid input"""
-    if expected_raise:
-        with pytest.raises(AssertionError):
-            ucb(q, n, log(n_total), ucb_constant)
-    else:
-        ucb(q, n, log(n_total), ucb_constant)
-
-
-@pytest.mark.parametrize(
-    "q,n,n_total,ucb_constant,expectation",
-    [
-        (123, 0, 234, 452, float("inf")),
-        (0, 1, 1, 1, sqrt(log(1) / 1)),
-        (-5.2, 1, 1, 1, -5.2 + sqrt(log(1) / 1)),
-        (134, 3, 4, 1, 134 + sqrt(log(4) / 3)),
-        (1, 1, 1, 50.3, 1 + 50.3 * sqrt(log(1) / 1)),
-        (1, 1, 10, 50.3, 1 + 50.3 * sqrt(log(10) / 1)),
-    ],
-)
-def test_ucb(q, n, n_total, ucb_constant, expectation):
-    """Tests :func:`~online_pomdp_planning.mcts.ucb`"""
-    assert ucb(q, n, log(n_total), ucb_constant) == expectation
-
-
 def test_ucb_scores():
     """tests `func:ucb_scores`"""
     u = 50.3
@@ -626,73 +595,93 @@ def test_ucb_scores():
     assert action_scores[True] == 1 + 50.3 * sqrt(log(10) / 1)
 
 
-@pytest.mark.parametrize(
-    "q,n,prior,c,tot,res",
-    [
-        (  # base case
-            0,
-            0,
-            1.0,
-            1.0,
-            1,
-            1,
-        ),
-        (  # Q value
-            0.4,
-            0,
-            1.0,
-            1.0,
-            1,
-            1.4,
-        ),
-        (  # c
-            0,
-            0,
-            1.0,
-            1.2,
-            1,
-            1.2,
-        ),
-        (  # prior
-            0,
-            0,
-            0.8,
-            1.0,
-            1,
-            0.8,
-        ),
-        (  # tot
-            0,
-            0,
-            1.0,
-            1.0,
-            10,
-            sqrt(10),
-        ),
-        (  # random
-            0.68,
-            23,
-            0.2,
-            1.25,
-            89,
-            0.7782706367922563,
-        ),
-    ],
-)
-def test_alphazero_ucb(q, n, prior, c, tot, res):
-    """tests `func:alphazero_score`"""
+def random_action_stats():
+    """Returns a random set of action stats"""
+    N = random.randint(1, 10)
+    q = [random.random() * 100 for _ in range(N)]
+    n = [random.randint(0, 10) for _ in range(N)]
 
-    # basic tests that should always return 0 or ``q``
-    assert alphazero_ucb(0, n, 0, sqrt(tot), c) == 0
-    assert alphazero_ucb(0, n, prior, sqrt(tot), 0) == 0
-    assert alphazero_ucb(q, n, 0, sqrt(tot), c) == q
-    assert alphazero_ucb(q, n, prior, sqrt(tot), 0) == q
+    unnormalized_probabilities = [random.random() for _ in range(N)]
+    total_prob = sum(unnormalized_probabilities)
+    p = [prob / total_prob for prob in unnormalized_probabilities]
 
-    assert pytest.approx(alphazero_ucb(q, n, prior, sqrt(tot), c)) == res
+    u = random.random() * 10
+    u2 = random.random() * 10
+
+    return {i: {"qval": q[i], "n": n[i], "prior": p[i]} for i in range(N)}, u, u2
+
+
+def check_ucb_dicts_equal(d1, d2):
+    """Tests *approximately* whether `Any -> float` dictionaries are equal"""
+    assert d1.keys() == d2.keys()
+    for v1, v2 in zip(d1.values(), d2.values()):
+        assert v1 == pytest.approx(v2)
+
+
+def test_unified_ucb_scores():
+    """Tests :func:`unified_ucb_scores`"""
+
+    def normalize_q(q: float, q_stat: MovingStatistic) -> float:
+        if q_stat.min < q_stat.max:
+            return q_stat.normalize(q)
+
+        return q
+
+    def create_tradition_ucb_scores(u: float):
+        return partial(
+            unified_ucb_scores,
+            get_q=lambda s, _: s["qval"],
+            get_nominator=lambda N: np.log(N) if N > 0 else 0,
+            get_expl_term=lambda nom, n: sqrt(nom / n) if n > 0 else float("inf"),
+            get_prior=lambda _: 1,
+            get_base_term=lambda _: u,
+        )
+
+    def create_alpha_zero_scores(u: float):
+        return partial(
+            unified_ucb_scores,
+            get_q=lambda s, info: normalize_q(s["qval"], info["q_statistic"]),
+            get_nominator=sqrt,
+            get_expl_term=lambda nom, n: nom / (1 + n),
+            get_prior=itemgetter("prior"),
+            get_base_term=lambda _: u,
+        )
+
+    def create_muzero_scores(u: float, u2: float):
+        return partial(
+            unified_ucb_scores,
+            get_q=lambda s, info: normalize_q(s["qval"], info["q_statistic"]),
+            get_nominator=sqrt,
+            get_expl_term=lambda nom, n: nom / (1 + n),
+            get_prior=itemgetter("prior"),
+            get_base_term=lambda N: u + np.log((1 + N + u2) / u2),
+        )
+
+    for _ in range(100):
+        stats, u, u2 = random_action_stats()
+
+        check_ucb_dicts_equal(
+            create_tradition_ucb_scores(u)(stats, {}), ucb_scores(stats, {}, u)
+        )
+
+        q_stat = MovingStatistic()
+        for s in stats.values():
+            q_stat.add(s["qval"])
+        info = {"q_statistic": q_stat}
+
+        check_ucb_dicts_equal(
+            create_alpha_zero_scores(u)(stats, info),
+            alphazero_scores(stats, info, u),
+        )
+
+        check_ucb_dicts_equal(
+            muzero_scores(stats, info, u, u2),
+            create_muzero_scores(u, u2)(stats, info),
+        )
 
 
 def test_alphazero_ucb_scores():
-    """tests :func:`alphazero_ucb_scores`"""
+    """tests :func:`alphazero_scores`"""
     stats = {
         "a1": {"qval": 0, "n": 0, "prior": 0.7},
         True: {"qval": 0, "n": 0, "prior": 0.1},
@@ -702,7 +691,7 @@ def test_alphazero_ucb_scores():
 
     info = {"q_statistic": MovingStatistic()}
 
-    scores = alphazero_ucb_scores(stats, info, 0.5)
+    scores = alphazero_scores(stats, info, 0.5)
 
     assert len(scores) == len(stats)
     assert pytest.approx(scores["a1"]) == 0.7 * 2 * 0.5
@@ -713,7 +702,7 @@ def test_alphazero_ucb_scores():
     info["q_statistic"].add(0)
     info["q_statistic"].add(2.3)
 
-    scores = alphazero_ucb_scores(stats, info, 0.5)
+    scores = alphazero_scores(stats, info, 0.5)
 
     assert len(scores) == len(stats)
     assert pytest.approx(scores["a1"]) == 0.7 * 2 * 0.5
