@@ -24,8 +24,10 @@ from online_pomdp_planning.mcts import (
     expand_node_with_all_actions,
     has_simulated_n_times,
     initiate_info,
+    max_backup,
     max_q_action_selector,
     max_visits_action_selector,
+    mc_backup,
     muzero_expand_node,
     muzero_scores,
     random_policy,
@@ -944,36 +946,54 @@ def test_select_deterministc_leaf_by_max_scores():
     assert info["ucb_tree_depth"].num == 4
 
 
+def test_max_backup():
+    """Tests that :func:`~online_pomdp_planning.mcts.max_backup` raises bad discount"""
+    root = ObservationNode()
+
+    actions = [True, "some action", 0, ("stuff", 2)]
+    qs = [(random.random() - 0.5) * 10 for _ in range(len(actions))]
+
+    # generate some statistics
+    for a, q in zip(actions, qs):
+        root.add_action_node(ActionNode(a, {"qval": q}, root))
+
+    assert max_backup(
+        random.choice(list(root.action_nodes.values())), random.random()
+    ) == max(qs)
+
+
 def test_backprop_running_q_assertion():
     """Tests that :func:`~online_pomdp_planning.mcts.backprop_running_q` raises bad discount"""
     root = ObservationNode()
     leaf = ActionNode("some action", {"qval": 0.3, "n": 1}, root)
 
-    with pytest.raises(AssertionError):
-        backprop_running_q(
-            -1,
-            leaf,
-            [1.0],
-            0,
-            {"q_statistic": MovingStatistic()},
-        )
-    with pytest.raises(AssertionError):
-        backprop_running_q(
-            1.1,
-            leaf,
-            [1.0],
-            0,
-            {"q_statistic": MovingStatistic()},
-        )
+    root.add_action_node(leaf)
 
-    # ``None`` is acceptable leaf evaluation
-    backprop_running_q(
-        0.9,
-        leaf,
-        [1.0],
-        None,
-        {"q_statistic": MovingStatistic()},
-    )
+    for backup_operator in [mc_backup, max_backup]:
+
+        with pytest.raises(AssertionError):
+            backprop_running_q(
+                leaf,
+                [1.0],
+                0,
+                {"q_statistic": MovingStatistic()},
+                -1,
+                backup_operator,
+            )
+        with pytest.raises(AssertionError):
+            backprop_running_q(
+                leaf, [1.0], 0, {"q_statistic": MovingStatistic()}, 1.1, backup_operator
+            )
+
+        # ``None`` is acceptable leaf evaluation
+        backprop_running_q(
+            leaf,
+            [1.0],
+            None,
+            {"q_statistic": MovingStatistic()},
+            0.9,
+            backup_operator,
+        )
 
 
 @pytest.mark.parametrize(
@@ -996,11 +1016,12 @@ def test_backprop_running_q(discount_factor, new_q_first, new_q_leaf):
     leaf_selection_output = [0.1, 7.0]
     leaf_evaluation = -5
     backprop_running_q(
-        discount_factor,
         leaf_node,
         leaf_selection_output,
         leaf_evaluation,
         {"q_statistic": MovingStatistic()},
+        discount_factor,
+        mc_backup,
     )
 
     # lots of math by hand, hope this never needs to be re-computed

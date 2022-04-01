@@ -1058,16 +1058,28 @@ class DeterministicBackPropagation(Protocol):
         """
 
 
+def mc_backup(_: ActionNode, q: float) -> float:
+    """Monte-Carlo backup operator: returns q"""
+    return q
+
+
+def max_backup(n: ActionNode, _: float) -> float:
+    """Returns max Q-value of parent node"""
+    return max(s["qval"] for s in n.parent.child_stats.values())
+
+
 def backprop_running_q(
-    discount_factor: float,
     leaf: ActionNode,
     leaf_selection_output: List[float],
     leaf_evaluation: Optional[float],
     info: Info,
+    discount_factor: float,
+    backup_operator: Callable[[ActionNode, float], float],
 ) -> None:
     """Updates running Q average of visited nodes
 
-    Implements :class:`BackPropagation`
+    Implements :class:`BackPropagation` given ``discount_factor`` and
+    ``backup_operator``
 
     Updates the visited nodes (through parents of ``leaf``) by updating the
     running Q average. Assumes the statistics in nodes have mappings "qval" ->
@@ -1079,16 +1091,22 @@ def backprop_running_q(
 
     Will close bounds `info["q_statistic"]`
 
+    Possible ``backup_operator`` include:
+
+        - :func:`mc_backup`: just backs up sample q
+        - :func:`max_backup`: backs up max q-value
+
     :param discount_factor: 'gamma' of the POMDP environment [0, 1]
     :param leaf: leaf node
     :param leaf_selection_output: list of rewards from tree policy
     :param leaf_evaluation: return estimate, assumed 0 if ``None``
     :param info: run time information (ignored)
+    :param backup_operator: computes target_q for next backup
     :return: has only side effects
     """
     assert 0 <= discount_factor <= 1
 
-    reverse_return = leaf_evaluation if leaf_evaluation else 0
+    target_return = leaf_evaluation if leaf_evaluation else 0
 
     # loop through all rewards in reverse order
     # simultaneously traverse back up the tree through `leaf`
@@ -1096,18 +1114,21 @@ def backprop_running_q(
     for reward in reversed(leaf_selection_output):
         assert n, "somehow got to root without processing all rewards"
 
-        reverse_return = reward + discount_factor * reverse_return
+        target_return = reward + discount_factor * target_return
 
         # grab current stats
         stats = n.stats
         q, num = stats["qval"], stats["n"]
 
         # store next stats
-        stats["qval"] = (q * num + reverse_return) / (num + 1)
+        stats["qval"] = (q * num + target_return) / (num + 1)
         stats["n"] = num + 1
 
         # adjust bounds in `info`
         info["q_statistic"].add(stats["qval"])
+
+        # figure out which value to back up
+        target_return = backup_operator(n, target_return)
 
         # go up in tree
         n = n.parent.parent
@@ -1604,7 +1625,9 @@ def create_POUCT(
     leaf_select = partial(
         select_leaf_by_max_scores, sim, node_scoring_method, max_tree_depth
     )
-    backprop = partial(backprop_running_q, discount_factor)
+    backprop = partial(
+        backprop_running_q, discount_factor=discount_factor, backup_operator=mc_backup
+    )
     action_select = max_q_action_selector
 
     return partial(
@@ -1682,7 +1705,9 @@ def create_POUCT_with_model(
         select_leaf_by_max_scores, sim, node_scoring_method, max_tree_depth
     )
     leaf_eval = partial(expand_and_evaluate_with_model, model=leaf_eval_model)
-    backprop = partial(backprop_running_q, discount_factor)
+    backprop = partial(
+        backprop_running_q, discount_factor=discount_factor, backup_operator=mc_backup
+    )
     action_select = max_q_action_selector
 
     return partial(
