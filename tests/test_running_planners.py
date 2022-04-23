@@ -93,11 +93,17 @@ def test_pouct():
 
     action, info = planner(uniform_tiger_belief)
     assert action == Tiger.H
+    assert sum(stat["n"] for stat in info["tree_root_stats"].values()) == large_num_sum
     assert info["iteration"] == large_num_sum
 
-    planner = create_POUCT(Tiger.actions(), Tiger.sim, large_num_sum, ucb_constant=100)
     action, info = planner(tiger_left_belief)
+    assert sum(stat["n"] for stat in info["tree_root_stats"].values()) == large_num_sum
     assert action == Tiger.L
+    assert info["iteration"] == large_num_sum
+
+    action, info = planner(tiger_right_belief)
+    assert sum(stat["n"] for stat in info["tree_root_stats"].values()) == large_num_sum
+    assert action == Tiger.R
     assert info["iteration"] == large_num_sum
 
     planner = create_POUCT(

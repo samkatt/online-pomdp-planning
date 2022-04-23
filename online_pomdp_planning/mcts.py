@@ -1578,8 +1578,19 @@ def create_POUCT(
     max_tree_depth = min(max_tree_depth, horizon)
     action_list = list(actions)
 
-    if not init_stats:
+    if init_stats is None:
         init_stats = {a: {"qval": 0, "n": 0} for a in action_list}
+
+    def generate_stats() -> ActionStats:
+        """Returns initial action statistics
+
+        This is to avoid giving _the same_ dictionary to various parts of the
+        MCTS tree, accidentally sharing statistics where they should not
+
+        :return: copy of ``init_stats``
+        """
+        assert init_stats is not None
+        return {a: dict(stats) for a, stats in init_stats.items()}
 
     # stop condition: keep track of `pbar` if `progress_bar` is set
     pbar = no_stop
@@ -1590,15 +1601,17 @@ def create_POUCT(
     def stop_condition(info: Info) -> bool:
         return real_stop_cond(info) or pbar(info)
 
-    tree_constructor = partial(
-        create_root_node_with_child_for_all_actions,
-        action_stats=init_stats,
-    )
+    def tree_constructor(belief, info):
+        return create_root_node_with_child_for_all_actions(
+            belief, info, generate_stats()
+        )
 
     # defaults
     if not leaf_eval:
         assert rollout_depth > 0
-        expansion_strategy = partial(expand_node_with_all_actions, init_stats)
+
+        def expansion_strategy(o, action_node, info):
+            return expand_node_with_all_actions(generate_stats(), o, action_node, info)
 
         def rollout_evaluation(leaf: ActionNode, s: State, o: Observation, info: Info):
             """Evaluates a leaf (:class:`ExpandAndEvaluate`) through random expand_and_rollout"""
