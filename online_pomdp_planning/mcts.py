@@ -1401,6 +1401,7 @@ def mcts(
     expand_and_eval: ExpandAndEvaluate,
     backprop: BackPropagation,
     action_select: ActionSelection,
+    horizon: int,
     belief: Belief,
 ) -> Tuple[Action, Info]:
     """The general MCTS method, defined by its components
@@ -1431,9 +1432,11 @@ def mcts(
     :param expand_and_eval: the leaf evaluation method
     :param backprop: the method for updating the statistics in the visited nodes
     :param action_select: the method for picking an action given root node
+    :param horizon: the length of the problem
     :param belief: the current belief (over the state) at the root node
     :return: the preferred action and run time information (e.g. # simulations)
     """
+    assert horizon > 0, f"Horizon ({horizon}) must be positive"
 
     info: Info = initiate_info()
 
@@ -1449,7 +1452,11 @@ def mcts(
             state, root_node, info
         )
 
-        if not terminal_flag:
+        assert (
+            info["leaf_depth"] <= horizon
+        ), f"Somehow the tree depth ({info['leaf_depth']}) exceeds the horizon ({horizon})"
+
+        if not terminal_flag and info["leaf_depth"] < horizon:
             evaluation = expand_and_eval(leaf, state, obs, info)
         else:
             evaluation = None
@@ -1651,6 +1658,7 @@ def create_POUCT(
         leaf_eval,
         backprop,
         action_select,
+        horizon,
     )
 
 
@@ -1663,6 +1671,7 @@ def create_POUCT_with_model(
         Tuple[float, ActionStats],
     ],
     ucb_constant: float = 1,
+    horizon: int = 100,
     max_tree_depth: int = 100,
     discount_factor: float = 0.95,
     progress_bar: bool = False,
@@ -1682,12 +1691,13 @@ def create_POUCT_with_model(
     :param num_sims: number of simulations to run
     :param leaf_eval_model: the state-based evaluation model
     :param ucb_constant: exploration constant used in UCB, defaults to 1
+    :param horizon: the length of the problem
     :param max_tree_depth: the depth the tree is allowed to grow to, defaults to 100
     :param discount_factor: the discount factor of the environment, defaults to 0.95
     :param progress_bar: flag to output a progress bar, defaults to False
     :return: MCTS with planner signature (given num sims)
     """
-    assert num_sims > 0 and max_tree_depth > 0
+    assert num_sims > 0 and max_tree_depth > 0 and horizon > 0
 
     action_list = list(actions)
 
@@ -1731,6 +1741,7 @@ def create_POUCT_with_model(
         leaf_eval,
         backprop,
         action_select,
+        horizon,
     )
 
 

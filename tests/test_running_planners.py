@@ -155,6 +155,37 @@ def test_pouct_with_prior():
     action, info = planner(tiger_right_belief)
     assert action == Tiger.R
 
+    # specifically test that the horizon is honored
+    planner = create_POUCT(
+        Tiger.actions(),
+        Tiger.sim,
+        16384,
+        ucb_constant=100,
+        horizon=2,
+        discount_factor=1.0,
+        max_tree_depth=1,
+        leaf_eval=lambda leaf, s, o, info: 100,
+    )
+
+    _, info = planner(tiger_right_belief)
+    assert (
+        info["tree_root_stats"][Tiger.H]["qval"] == 99
+    )  # leaf_eval(100) + reward (-1)
+
+    # specifically test that the horizon is honored
+    planner = create_POUCT(
+        Tiger.actions(),
+        Tiger.sim,
+        16384,
+        ucb_constant=100,
+        horizon=1,
+        discount_factor=1.0,
+        max_tree_depth=1,
+        leaf_eval=lambda leaf, s, o, info: 100,
+    )
+    _, info = planner(tiger_right_belief)
+    assert info["tree_root_stats"][Tiger.H]["qval"] == -1  # - 1 (reward)
+
 
 def test_muzero():
     """tests :func:`create_muzero`"""
