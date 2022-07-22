@@ -17,12 +17,12 @@ from tests.test_running_planners import (
 )
 
 
-def random_stop_condition(s, o, p) -> bool:
+def random_stop_condition(h, p) -> bool:
     """Stop condition that randomly terminates (with probability `p`)"""
     return random.random() < p
 
 
-def always_stop_condition(s, o) -> bool:
+def always_stop_condition(h) -> bool:
     """A :class:`StopCondition` that always terminates"""
     return True
 
@@ -31,7 +31,7 @@ def test_options_pouct():
     """tests :func:`~online_pomdp_planning.options.mcts.create_POUCT_with_options` on Tiger"""
 
     large_num_sum = 12345
-    listen_option = Option(lambda o: Tiger.H, partial(random_stop_condition, p=0.3))
+    listen_option = Option(lambda h: Tiger.H, partial(random_stop_condition, p=0.3))
     open_left_option = action_to_option(Tiger.L, always_stop_condition)
     open_right_option = action_to_option(Tiger.R, always_stop_condition)
 

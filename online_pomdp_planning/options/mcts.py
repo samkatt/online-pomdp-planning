@@ -22,6 +22,8 @@ from online_pomdp_planning.mcts import (
 )
 from online_pomdp_planning.types import (
     Action,
+    ActionObservation,
+    History,
     Info,
     Observation,
     Planner,
@@ -36,14 +38,10 @@ class StopCondition(Protocol):
     .. automethod:: __call__
     """
 
-    def __call__(self, o: Observation) -> bool:
+    def __call__(self, h: History) -> bool:
         """The signature of a stop condition
 
-        .. todo::
-
-            - Consider making it dependent on the history
-
-        :param o: the last observation to help decide whether to terminate
+        :param h: the last observation to help decide whether to terminate
         :return: whether or not to terminate (can be stochastic)
         """
         raise NotImplementedError()
@@ -55,11 +53,11 @@ class OptionPolicy(Protocol):
     .. automethod:: __call__
     """
 
-    def __call__(self, o: Observation) -> Action:
+    def __call__(self, h: History) -> Action:
         """The signature of a policy in an option, simply reactive to last observation
 
-        :param o: the (last) observation to base the action on
-        :return: which action to take given `o`
+        :param h: the history to consider when taking an action
+        :return: which action to take given `h`
         """
         raise NotImplementedError()
 
@@ -75,24 +73,48 @@ class Option(NamedTuple):
     """
 
     policy: OptionPolicy
-    stop_condition: Any
+    stop_condition: StopCondition
 
 
 def action_to_option(a: Action, cond: StopCondition) -> Option:
-    """Creates an :class:`Option` whose policy is always doing `a` and stopping when `cond`"""
-    return Option(lambda o: a, cond)
+    """Creates an :class:`Option` whose policy is always doing `a` and stopping when `cond`
+
+    :param a: action to do in the option's policy
+    :param cond: the stop-condition of the option
+    """
+    return Option(lambda h: a, cond)
 
 
 def apply_option(
     option: Option, state: State, obs: Observation, sim: Simulator
 ) -> Tuple[State, Observation, List[float], bool]:
-    # at least call our option once
-    s, o, r, t = sim(state, option.policy(obs))
+    """Runs `option` in `sim` starting from `state`
 
+    Simulates actions from the :class:`OptionPolicy` in :class:`Option` with
+    `sim` on the `state`. This stops until a transition is terminal, or the
+    :class:`StopCondition` returns `True`.
+
+    The result is the last state and action, the list of generated rewards, and
+    whether it was terminal.
+
+    NOTE: :class:`~online_pomdp_planning.mcts.Action` in first
+    :class:`~online_pomdp_planning.mcts.History` given to `option` is ``None``.
+
+    :param option: which option to follow
+    :param state: from which to start the option from
+    :param obs: the last observation (potential input `option`)
+    :param sim: used to simulate the trajectory of following `option`
+    """
+
+    # at least call our option once and start the history plus reards
+    h = [ActionObservation(None, obs)]
+    s, o, r, t = sim(state, option.policy(h))
     rewards = [r]
-    # TODO: clean up, must be a better way? Whale operator?
-    while not t and not option.stop_condition(s, o):
-        s, o, r, t = sim(s, option.policy(o))
+
+    while not t and not option.stop_condition(h):
+        a = option.policy(h)
+        s, o, r, t = sim(s, a)
+        h.append(ActionObservation(a, o))
         rewards.append(r)
 
     return s, o, rewards, t

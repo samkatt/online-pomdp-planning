@@ -9,9 +9,9 @@ from online_pomdp_planning.options.mcts import Option, apply_option
 from online_pomdp_planning.types import Action
 
 
-def is_observation_stop_condition(_, o, stop_o) -> bool:
+def is_observation_stop_condition(h, stop_o) -> bool:
     """A :class:`StopCondition` that returns `True` if `o` equals `stop_o`"""
-    return o == stop_o
+    return h[-1].observation == stop_o
 
 
 def macro_action_policy(s, o, a) -> Action:
@@ -20,6 +20,8 @@ def macro_action_policy(s, o, a) -> Action:
 
 
 def test_apply_option_stop_condition():
+    """Tests the stop condition through :func:`apply_option`"""
+
     def random_observation_simulator(s, a):
         """A simulator which randomly returns 'stop o'"""
         return (
@@ -39,7 +41,7 @@ def test_apply_option_stop_condition():
         )
 
     option = Option(
-        lambda o: None,
+        lambda h: None,
         partial(is_observation_stop_condition, stop_o="stop o"),
     )
 
