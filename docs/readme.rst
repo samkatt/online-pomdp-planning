@@ -22,6 +22,9 @@ simulator, and spits out its favorite action.
    Anthony R. Cassandra. “Planning and acting in partially observable
    stochastic domains.“ Artificial intelligence 101.1-2 (1998): 99-134.
 
+Methods
+-------
+
 This library implements a set of these methods:
 
 .. toctree::

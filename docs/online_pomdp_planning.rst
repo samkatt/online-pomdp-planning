@@ -1,6 +1,14 @@
 online\_pomdp\_planning package
 ===============================
 
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   online_pomdp_planning.options
+
 Submodules
 ----------
 
