@@ -31,7 +31,10 @@ from online_pomdp_planning.types import (
 
 
 class StopCondition(Protocol):
-    """Represents the stop condition in :class:`Option`"""
+    """Represents the stop condition in :class:`Option`
+
+    .. automethod:: __call__
+    """
 
     def __call__(self, o: Observation) -> bool:
         """The signature of a stop condition
@@ -47,7 +50,10 @@ class StopCondition(Protocol):
 
 
 class OptionPolicy(Protocol):
-    """Represents the policy of an :class:`Option`"""
+    """Represents the policy of an :class:`Option`
+
+    .. automethod:: __call__
+    """
 
     def __call__(self, o: Observation) -> Action:
         """The signature of a policy in an option, simply reactive to last observation
@@ -103,13 +109,16 @@ def select_leaf_with_options(
     """Selects a leaf in the option-observation tree
 
     Given a simulator and (root?) node, this function will select the next leaf
-    to evaluate/expand etc. Picks options according to :func:`select_action`
-    --- with ``scoring_method`` --- and calls :func:`apply_option` to simulate
+    to evaluate/expand etc. Picks options according to
+    :func:`~online_pomdp_planning.mcts.select_action` --- with
+    ``scoring_method`` --- and calls :func:`apply_option` to simulate
     interactions.
 
-    Implements :class:`LeafSelection` when provided with `sim` and `scoring_method`.
+    Implements :class:`~online_pomdp_planning.mcts.LeafSelection` when provided
+    with `sim` and `scoring_method`.
 
-    See :func:`unified_ucb_scores` for ways of constructing ``scoring_method``
+    See :func:`~online_pomdp_planning.mcts.unified_ucb_scores` for ways of
+    constructing ``scoring_method``
 
     NOTE::
 
@@ -196,13 +205,14 @@ def create_POUCT_with_options(
     """Call this to create a planner for options
 
     Assumes _you_ give the `options` - see :func:`action_to_option` for
-    inspiration. It basically applies :func:`mcts` with `options` as actions.
-    The key difference is that one tree 'step' (branching) corresponds to
-    potentially many `sim` steps.
+    inspiration. It basically applies :func:`~online_pomdp_planning.mcts.mcts`
+    with `options` as actions. The key difference is that one tree 'step'
+    (branching) corresponds to potentially many `sim` steps.
 
-    It will run `num_sims` simulations using :func:`ucb_scores` to pick
-    'options' and then :func:`apply_option` for getting a list of discounted
-    rewards and observation.
+    It will run `num_sims` simulations using
+    :func:`~online_pomdp_planning.mcts.ucb_scores` to pick 'options' and then
+    :func:`apply_option` for getting a list of discounted rewards and
+    observation.
 
     The returned MCTS currently has standard implementation choices for things
     as back-propagation (running q average), tree constructor (initialization
@@ -263,7 +273,7 @@ def create_POUCT_with_options(
     # It does not how many time steps each step took due to options,
     # and thus cannot compute the discounted reward itself.
     # It is important that the rewards returned in `leaf_select` are
-    # already discounted, and apply a 1.0 (no-op) discount here
+    # already discounted, and apply a 1.0 discount here, for accuracy
     backprop = partial(
         backprop_running_q, discount_factor=1.0, backup_operator=mc_backup
     )
@@ -277,5 +287,5 @@ def create_POUCT_with_options(
         expand_and_evaluate,
         backprop,
         action_select,
-        float("inf"),
+        float("inf"),  # infinite horizon, since it does not work well
     )

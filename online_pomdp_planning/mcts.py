@@ -861,7 +861,10 @@ class ExpandAndEvaluate(Protocol):
 
 
 class Policy(Protocol):
-    """The signature for a policy"""
+    """The signature for a policy
+
+    .. automethod:: __call__
+    """
 
     def __call__(self, s: State, o: Observation) -> Action:
         """A (stochastic) mapping from state and/or observation to action

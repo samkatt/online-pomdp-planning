@@ -44,6 +44,24 @@ is called with a :class:`~online_pomdp_planning.types.Belief`, and returns a
 .. automethod:: online_pomdp_planning.types.Planner.__call__
    :noindex:
 
+Options
+-------
+
+We also provide an extension to use options.
+
+.. Options description
+
+Options are 'macro-actions' or 'temporal abstractions' that last over multiple
+time steps. This is useful for longer term planning, given that the options are
+good. An option typically consists of a 'policy', and a 'terminal condition'.
+The details of such implementations are often different per implementation. For
+the particular implementations, we refer you to the specific implementations.
+
+.. toctree::
+   :maxdepth: 1
+
+   methods/mcts/pouct
+
 Types
 -----
 
